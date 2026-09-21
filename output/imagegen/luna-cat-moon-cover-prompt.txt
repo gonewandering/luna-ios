@@ -1,0 +1,8 @@
+Use case: stylized-concept
+Asset type: portrait cover art for the Luna iOS app
+Primary request: a monochrome grey cat looking up at the moon, in the style of futuristic digital art.
+Subject and scene: one elegant grey cat seated in a quiet, dark environment, seen from behind in three-quarter view with its head clearly tilted upward toward a luminous moon.
+Style: polished futuristic digital illustration, finely resolved fur with subtle geometric and particle-like details, soft atmospheric depth and restrained lunar glow.
+Composition: vertical cover composition, the cat in the lower portion and the moon above; strong readable silhouettes and generous dark negative space. Keep both subjects away from the outer edges so the cover can be cropped for a mobile screen.
+Lighting and palette: strictly monochrome black, charcoal, silver and grey; delicate moonlight outlines the cat's ears, back and curled tail. Calm, mysterious and contemplative.
+Constraints: no color accents, no text, no logos, no watermark, no additional characters, no app UI or device frame.

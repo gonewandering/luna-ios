@@ -1,0 +1,67 @@
+name: Luna
+options:
+  bundleIdPrefix: dev.luna
+  deploymentTarget:
+    iOS: "18.0"
+packages:
+  WebRTC:
+    url: https://github.com/stasel/WebRTC
+    exactVersion: 153.0.0
+  Textual:
+    url: https://github.com/gonzalezreal/textual
+    exactVersion: 0.5.0
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    TARGETED_DEVICE_FAMILY: "1,2"
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+targets:
+  Luna:
+    type: application
+    platform: iOS
+    sources: [Luna]
+    dependencies:
+      - package: WebRTC
+      - package: Textual
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.luna.ios
+        GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: Luna/Info.plist
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+  LunaTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [LunaTests]
+    dependencies:
+      - target: Luna
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+  LunaLiveTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [LunaLiveTests]
+    dependencies:
+      - target: Luna
+      - package: WebRTC
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  Luna:
+    build:
+      targets:
+        Luna: all
+        LunaTests: [test]
+    test:
+      targets: [LunaTests]
+  LunaLiveCheck:
+    build:
+      targets:
+        Luna: all
+        LunaLiveTests: [test]
+    test:
+      targets: [LunaLiveTests]
