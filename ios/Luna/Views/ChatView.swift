@@ -6,6 +6,7 @@ struct ChatView: View {
     @State private var sending = false
     @State private var showingModels = false
     @State private var showingTasks = false
+    @State private var atBottom = true
     @FocusState private var composerFocused: Bool
     private var sessionRuns: [AgentRun] {
         Self.visibleRuns(sessionID: session.id, runs: store.runs.values)
@@ -73,14 +74,32 @@ struct ChatView: View {
             .defaultScrollAnchor(.top, for: .alignment)
             .scrollDismissesKeyboard(.interactively)
             .background(Palette.canvas)
-            .onChange(of: store.messages[session.id]?.last, initial: true) { _, _ in
-                proxy.scrollTo("bottom", anchor: .bottom)
+            .onScrollGeometryChange(for: Bool.self) { geometry in
+                // Near-bottom within ~80pt counts as "following the latest".
+                geometry.contentOffset.y + geometry.containerSize.height >= geometry.contentSize.height - 80
+            } action: { _, nearBottom in
+                atBottom = nearBottom
             }
-            .onChange(of: sessionRuns.map { [$0.id, $0.text, $0.output] }) { _, _ in
-                proxy.scrollTo("bottom", anchor: .bottom)
+            .onChange(of: store.messages[session.id]?.last, initial: true) { _, _ in
+                // New or reconciled history: follow only when the user is at the
+                // bottom (atBottom starts true, so initial presentation still pins).
+                if atBottom { proxy.scrollTo("bottom", anchor: .bottom) }
+            }
+            .onChange(of: sessionRuns.map(\.id)) { old, new in
+                // A newly appearing run in this session means the user just
+                // submitted a prompt here: always bring it into view and resume
+                // following its response, even if they had scrolled up.
+                if !Set(new).subtracting(old).isEmpty {
+                    atBottom = true
+                    proxy.scrollTo("bottom", anchor: .bottom)
+                }
+            }
+            .onChange(of: sessionRuns.map { [$0.text, $0.output] }) { _, _ in
+                // Streaming content growth follows the latest only while at bottom.
+                if atBottom { proxy.scrollTo("bottom", anchor: .bottom) }
             }
             .onChange(of: store.approvals.values.filter { $0.sessionID == session.id }.map(\.id).sorted()) { _, _ in
-                proxy.scrollTo("bottom", anchor: .bottom)
+                if atBottom { proxy.scrollTo("bottom", anchor: .bottom) }
             }
             .safeAreaInset(edge: .bottom, spacing: 0) { composer }
         }

@@ -54,7 +54,7 @@ final class ChatViewportTests: XCTestCase {
         for runtime in store.runtimes.values { await runtime.disconnect() }
     }
 
-    @MainActor func testNewMessagesAndStreamingRepliesStayAtBottomAfterScrollingUp() async throws {
+    @MainActor func testUserAtBottomFollowsNewMessagesAndStreamingReplies() async throws {
         let store = AppStore(loadSavedState: false)
         let session = AgentSession(id: "viewport", title: "Chat viewport check", preview: "", source: "Test", updatedAt: 1, messageCount: 20)
         store.sessions = [session]
@@ -72,13 +72,11 @@ final class ChatViewportTests: XCTestCase {
         XCTAssertGreaterThan(scroll.contentSize.height, scroll.bounds.height * 2)
         await assertBottom(scroll, window: window)
 
-        scroll.setContentOffset(CGPoint(x: 0, y: -scroll.adjustedContentInset.top), animated: false)
-        try await Task.sleep(for: .milliseconds(100))
+        // A user who stays at the bottom keeps following new messages...
         store.messages[session.id]?.append(ChatMessage(id: "new", role: "user", content: "The latest incoming message", createdAt: 21))
         await assertBottom(scroll, window: window)
 
-        scroll.setContentOffset(CGPoint(x: 0, y: -scroll.adjustedContentInset.top), animated: false)
-        try await Task.sleep(for: .milliseconds(100))
+        // ...and a streaming reply that grows in place.
         store.runs["stream"] = AgentRun(id: "stream", sessionID: session.id, text: "Show a streaming reply", status: "running", output: "The reply is starting.", created: 22)
         await assertBottom(scroll, window: window)
         for index in 0..<3 {
@@ -88,8 +86,55 @@ final class ChatViewportTests: XCTestCase {
         store.runs["stream"]?.output += "\n\nLatest streamed content is visible."
         await assertBottom(scroll, window: window)
         let image = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in window.drawHierarchy(in: window.bounds, afterScreenUpdates: true) }
-        let attachment = XCTAttachment(image: image); attachment.name = "Chat follows streamed content"; attachment.lifetime = .keepAlways
+        let attachment = XCTAttachment(image: image); attachment.name = "Chat follows streamed content when at bottom"; attachment.lifetime = .keepAlways
         add(attachment)
+    }
+
+    @MainActor func testUserScrolledUpIsNotMovedByResponseUpdatesOrReconciliation() async throws {
+        let store = AppStore(loadSavedState: false)
+        let session = AgentSession(id: "viewport", title: "Chat viewport check", preview: "", source: "Test", updatedAt: 1, messageCount: 20)
+        store.sessions = [session]
+        store.messages[session.id] = (0..<20).map {
+            ChatMessage(id: "m-\($0)", role: "user", content: "Earlier message \($0)\n" + String(repeating: "A line of conversation.\n", count: 3), createdAt: Double($0))
+        }
+        // A run whose streamed answer is already on screen (rendered by a RunCard).
+        store.runs["stream"] = AgentRun(id: "stream", sessionID: session.id, text: "A question", status: "running", output: "A partial streamed answer.", created: 22)
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.first as? UIWindowScene)
+        let previous = scene.windows.first { $0.isKeyWindow }
+        let window = UIWindow(windowScene: scene)
+        window.rootViewController = UIHostingController(rootView: NavigationStack { ChatView(store: store, session: session) }.preferredColorScheme(.dark))
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true; window.rootViewController = nil; previous?.makeKeyAndVisible() }
+        try await Task.sleep(for: .milliseconds(400))
+        let scroll = try XCTUnwrap(scrollViews(in: window).max { $0.contentSize.height < $1.contentSize.height })
+        XCTAssertGreaterThan(scroll.contentSize.height, scroll.bounds.height * 2)
+
+        // The user scrolls up to read earlier messages.
+        scroll.setContentOffset(CGPoint(x: 0, y: -scroll.adjustedContentInset.top), animated: false)
+        await settle(scroll, window: window)
+        let restingOffset = scroll.contentOffset.y
+
+        // 1) An incoming message must not yank the viewport down.
+        store.messages[session.id]?.append(ChatMessage(id: "incoming", role: "assistant", content: "An unrelated new message", createdAt: 23))
+        await settle(scroll, window: window)
+        XCTAssertEqual(scroll.contentOffset.y, restingOffset, accuracy: 3, "An incoming message moved a scrolled-up user")
+
+        // 2) The active run's streamed output growing must not move the user.
+        store.runs["stream"]?.output += "\n\n" + String(repeating: "More streamed text. ", count: 40)
+        await settle(scroll, window: window)
+        XCTAssertEqual(scroll.contentOffset.y, restingOffset, accuracy: 3, "A growing stream moved a scrolled-up user")
+
+        // 3) Reconciliation (run -> server message identity swap) must not move the user.
+        store.messages[session.id]?.append(ChatMessage(id: "server-answer", role: "assistant", content: store.runs["stream"]!.output, createdAt: 24))
+        store.runs["stream"]?.status = "completed"
+        store.runs["stream"]?.historyReconciled = true
+        await settle(scroll, window: window)
+        XCTAssertEqual(scroll.contentOffset.y, restingOffset, accuracy: 3, "Reconciliation moved a scrolled-up user")
+        XCTAssertTrue(ChatView.visibleRuns(sessionID: session.id, runs: store.runs.values).isEmpty, "Run should be reconciled out of the visible set")
+    }
+
+    @MainActor private func settle(_ scroll: UIScrollView, window: UIWindow) async {
+        for _ in 0..<12 { window.layoutIfNeeded(); try? await Task.sleep(for: .milliseconds(40)) }
     }
 
     @MainActor private func assertBottom(_ scroll: UIScrollView, window: UIWindow, file: StaticString = #filePath, line: UInt = #line) async {

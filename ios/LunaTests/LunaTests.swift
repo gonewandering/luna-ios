@@ -72,6 +72,55 @@ final class LunaTests: XCTestCase {
         await store.disconnect()
     }
 
+    // Regression: a streaming/active run must never shrink or blank a timeline the
+    // user has already loaded (e.g. via "Load earlier messages"). run.history is a
+    // bounded tail snapshot; applying it must merge, not replace.
+    @MainActor func testActiveRunUpdateCannotShrinkOrBlankLoadedTimeline() {
+        let store = AppStore(loadSavedState: false)
+        let sid = "A"
+        store.sessions = [AgentSession(id: sid, title: "Long chat", preview: "", source: "test", updatedAt: 1, messageCount: 200)]
+        let loaded = (0..<150).map { ChatMessage(id: "m-\($0)", role: $0.isMultiple(of: 2) ? "user" : "assistant", content: "Message \($0)", createdAt: Double($0)) }
+        store.messages[sid] = loaded
+
+        // An active run whose pre-submit snapshot only holds the latest 100 rows.
+        var run = AgentRun(id: "r", sessionID: sid, text: "new prompt", status: "running", output: "", created: 200)
+        run.history = Array(loaded.suffix(100))
+        store.recordRunUpdate(run)
+        XCTAssertEqual(store.messages[sid], loaded, "An active run's tail snapshot must not drop earlier loaded messages")
+
+        // A subsequent update carrying an empty snapshot must not blank the timeline.
+        run.output = "streaming…"; run.history = []
+        store.recordRunUpdate(run)
+        XCTAssertEqual(store.messages[sid], loaded, "An empty run snapshot must not blank the visible timeline")
+    }
+
+    // Regression: a refresh/reconnect while a run is active merges rather than
+    // replaces, so paginated/cached rows survive.
+    @MainActor func testRefreshWhileRunActiveMergesInsteadOfReplacing() async throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let backend = FakeBackend()
+        backend.pageSize = 100
+        backend.availableSessions = [AgentSession(id: "A", title: "Long chat", preview: "", source: "test", updatedAt: 1, messageCount: 150)]
+        backend.history = (0..<150).map { ChatMessage(id: "m-\($0)", role: $0.isMultiple(of: 2) ? "user" : "assistant", content: "Message \($0)", createdAt: Double($0 + 1)) }
+        let store = AppStore(loadSavedState: false)
+        let profile = AgentProfile(name: "Test", kind: .hermes, address: "https://test.example")
+        try store.configure(profile: profile, key: "key", openAIKey: "", voice: VoiceController(), cache: root.appending(path: "cache.json"))
+        store.makeBackend = { backend }
+        await store.connect()
+        await store.loadMessages("A")
+        await store.loadMessages("A", older: true)
+        XCTAssertEqual(store.messages["A"]?.count, 150)
+        // A run becomes active with a bounded tail snapshot; a refresh arrives.
+        var run = AgentRun(id: "r", sessionID: "A", text: "new prompt", status: "running", output: "", created: 200)
+        run.history = Array((store.messages["A"] ?? []).suffix(100))
+        store.recordRunUpdate(run)
+        await store.loadMessages("A")   // refresh path while run is active
+        XCTAssertEqual(store.messages["A"]?.count, 150, "A refresh during an active run must not shrink the loaded timeline")
+        XCTAssertEqual(store.messages["A"]?.first?.id, "m-0")
+        await store.disconnect()
+    }
+
     @MainActor func testNoticesExpireIndependentlyAndDismissImmediately() {
         let notices = TransientNotices()
         let now = Date().addingTimeInterval(60)

@@ -198,8 +198,14 @@ import Observation
         let previous = runs[run.id]
         runs[run.id] = run
         sessionRevisions[run.sessionID, default: 0] += 1
-        // Freeze the pre-run history while the streaming answer is visible.
-        if let history = run.history, run.isActive { messages[run.sessionID] = history }
+        // Keep the timeline stable while the streaming answer is visible, but
+        // never shrink or blank it: merge the pre-run snapshot into what is
+        // already shown (paginated or cached rows must survive). run.history is a
+        // tail subset of the displayed rows, so this adds nothing during normal
+        // streaming and only backfills when the timeline is still empty.
+        if let history = run.history, run.isActive {
+            messages[run.sessionID] = ConversationHistory.merge(existing: messages[run.sessionID] ?? [], incoming: history, older: false)
+        }
         if run.isActive { notices.dismiss(TransientNotices.run(run.id)) }
         else if previous?.isActive != false && run.historyReconciled != true {
             notices.show(TransientNotices.run(run.id), duration: run.status == "completed" ? 8 : 12)
@@ -257,7 +263,11 @@ import Observation
     func loadMessages(_ sid: String, older: Bool = false, quietly: Bool = false) async {
         guard connected, let backend else { return }
         if !older, let run = runs.values.filter({ $0.sessionID == sid && $0.isActive && $0.history != nil }).min(by: { $0.created < $1.created }) {
-            messages[sid] = run.history; return
+            // While a run is streaming, do not fetch fresh (pre-response) history,
+            // but never replace the visible timeline with the snapshot: merge so
+            // paginated and cached rows survive a refresh/reconnect.
+            messages[sid] = ConversationHistory.merge(existing: messages[sid] ?? [], incoming: run.history ?? [], older: false)
+            return
         }
         let current = generation, revision = sessionRevisions[sid, default: 0]
         do {
