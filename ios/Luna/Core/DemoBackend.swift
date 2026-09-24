@@ -72,7 +72,7 @@ import Foundation
         _ = try await session(run.sessionID)
         runs[id] = ["status": .string("running"), "output": .string("")]
         runSessions[id] = run.sessionID
-        append(run.sessionID, role: "user", text: run.text, id: run.id + "-user")
+        append(run.sessionID, role: "user", text: run.text, id: run.id + "-user", photos: run.photos)
         return id
     }
     func status(_ id: String) async throws -> JSONObject { runs[id] ?? ["status": .string("interrupted"), "error": .string("The on-device demo restarted.")] }
@@ -122,9 +122,9 @@ import Foundation
         state.sessions[index].model = selection.model
         if let file { try ProtectedFile.write(state, to: file) }
     }
-    private func append(_ sid: String, role: String, text: String, id: String) {
+    private func append(_ sid: String, role: String, text: String, id: String, photos: [ChatPhoto]? = nil) {
         guard !(state.messages[sid] ?? []).contains(where: { $0.id == id }) else { return }
-        state.messages[sid, default: []].append(ChatMessage(id: id, role: role, content: text, createdAt: Date().timeIntervalSince1970))
+        state.messages[sid, default: []].append(ChatMessage(id: id, role: role, content: text, createdAt: Date().timeIntervalSince1970, photos: photos))
         if let index = state.sessions.firstIndex(where: { $0.id == sid }) {
             state.sessions[index].preview = String(text.prefix(140)); state.sessions[index].updatedAt = Date().timeIntervalSince1970
             state.sessions[index].messageCount = state.messages[sid]?.count ?? 0

@@ -8,16 +8,26 @@ struct MessageComposer: View {
     var sending = false
     var canSend = true
     var voiceIsActive = false
+    var hasAttachments = false
+    var canAddPhoto = true
+    var onAddPhoto: (() -> Void)? = nil
     var focus: FocusState<Bool>.Binding
     let onMicrophone: () -> Void
     let onSend: () -> Void
 
     var body: some View {
         HStack(alignment: .bottom, spacing: 12) {
+            if let onAddPhoto {
+                Button { focus.wrappedValue = false; onAddPhoto() } label: {
+                    Image(systemName: "plus").font(.system(size: 19, weight: .medium))
+                        .foregroundStyle(Palette.forest).frame(width: 30, height: 44)
+                }.disabled(sending || !canAddPhoto).accessibilityLabel("Attach photo")
+                    .accessibilityIdentifier("composer-attach-photo")
+            }
             TextField(placeholder, text: $text, axis: .vertical)
                 .lineLimit(1...6).font(.body).focused(focus).padding(.vertical, 12)
                 .accessibilityLabel(messageLabel).accessibilityIdentifier("message-input")
-            if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !hasAttachments {
                 Button {
                     focus.wrappedValue = false
                     onMicrophone()
@@ -27,6 +37,7 @@ struct MessageComposer: View {
                         .frame(width: 42, height: 42).background(Palette.button, in: Circle())
                 }.accessibilityLabel(voiceIsActive ? "End voice" : "Start voice conversation")
                     .accessibilityIdentifier("composer-microphone")
+                    .disabled(sending)
             } else {
                 Button(action: onSend) {
                     Group {

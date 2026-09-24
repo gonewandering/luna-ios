@@ -23,9 +23,9 @@ import Foundation
         guard FileManager.default.fileExists(atPath: file.path) else { return [:] }
         return try JSONDecoder().decode([String: AgentRun].self, from: Data(contentsOf: file))
     }
-    func admit(id: String, sessionID: String, text: String, model: HermesModelSelection? = nil, automaticModel: Bool = false) async throws -> AgentRun {
+    func admit(id: String, sessionID: String, text: String, model: HermesModelSelection? = nil, automaticModel: Bool = false, photos: [ChatPhoto] = []) async throws -> AgentRun {
         if let record = records[id] {
-            guard record.text == text && record.sessionID == sessionID else { throw ServiceError(message: "That request ID belongs to another prompt.", statusCode: 409) }
+            guard record.text == text && record.sessionID == sessionID && (record.photos ?? []) == photos else { throw ServiceError(message: "That request ID belongs to another prompt.", statusCode: 409) }
             return record
         }
         guard !paused else { throw ServiceError(message: "Reconnect Hermes before sending a prompt.") }
@@ -35,7 +35,9 @@ import Foundation
         guard features["run_submission"]?.bool == true, features["run_events_sse"]?.bool == true else {
             throw ServiceError(message: "This Hermes version needs the Runs streaming API. Update Hermes before submitting work.")
         }
-        guard !text.isEmpty, text.count <= 32000 else { throw ServiceError(message: "Enter a prompt of up to 32,000 characters.") }
+        guard !text.isEmpty || !photos.isEmpty, text.count <= 32000 else { throw ServiceError(message: "Enter a prompt of up to 32,000 characters or attach a photo.") }
+        guard photos.count <= ChatPhoto.maxCount else { throw ServiceError(message: "Attach up to four photos per message.") }
+        for photo in photos { _ = try photo.data() }
         guard records.values.filter(\.isActive).count < 30 else { throw ServiceError(message: "Wait for some queued tasks to finish.") }
         guard !records.values.contains(where: { $0.sessionID == sessionID && $0.status == "unknown" && $0.historyReconciled != true }) else {
             throw ServiceError(message: "A previous task has an unknown outcome. Check its conversation before sending more work.")
@@ -43,6 +45,7 @@ import Foundation
         // Do not await between checking the ID and recording admission.
         var record = AgentRun(id: id, sessionID: sessionID, text: text, status: "queued", output: "", created: Date().timeIntervalSince1970)
         record.responseInstructions = HermesResponseFormat.instructions
+        record.photos = photos.isEmpty ? nil : photos
         record.modelSelection = model
         record.automaticModel = automaticModel ? true : nil
         try commit(record)
@@ -204,7 +207,7 @@ import Foundation
                 }
                 if var run = records[id] {
                     if ["running", "stopping", "waiting_for_approval", "queued"].contains(state) { run.status = state }
-                    if let output = status["output"]?.string { run.output = Self.stableOutput(current: run.output, incoming: output) }
+                    if let output = status["output"], output != .null { run.output = Self.stableOutput(current: run.output, incoming: HermesClient.content(output)) }
                     try commit(run)
                     if let approval = status["approval"]?.object { _ = try consume(id, HermesEvent(type: "approval.request", data: approval)) }
                 }
@@ -220,7 +223,7 @@ import Foundation
             run.output += delta; try commit(run, durable: false)
         } else if event.type.hasPrefix("run."), ["completed", "failed", "cancelled", "interrupted"].contains(String(event.type.dropFirst(4))) {
             run.status = String(event.type.dropFirst(4))
-            if let output = event.data["output"]?.string { run.output = Self.stableOutput(current: run.output, incoming: output) }
+            if let output = event.data["output"], output != .null { run.output = Self.stableOutput(current: run.output, incoming: HermesClient.content(output)) }
             run.error = event.data["error"]?.string
             try commit(run); onFinished?(run); return true
         } else if event.type == "approval.request" {

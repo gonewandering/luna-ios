@@ -20,8 +20,9 @@ struct ChatMessage: Codable, Identifiable, Equatable, Sendable {
     var content: String
     var createdAt: Double
     var toolName: String?
+    var photos: [ChatPhoto]? = nil
     enum CodingKeys: String, CodingKey {
-        case id, role, content
+        case id, role, content, photos
         case createdAt = "created_at", toolName = "tool_name"
     }
 }
@@ -45,7 +46,9 @@ enum ConversationHistory {
             var pair: (Int, Int)?
             for userIndex in messages.indices where !used.contains(userIndex) {
                 let user = messages[userIndex]
-                guard user.role == "user", user.content == run.text, plausible(user, for: run) else { continue }
+                guard user.role == "user", user.content == run.text,
+                      (user.photos ?? []).map(\.hash) == (run.photos ?? []).map(\.hash),
+                      plausible(user, for: run) else { continue }
                 var responseIndex = messages.index(after: userIndex)
                 while responseIndex < messages.endIndex, messages[responseIndex].role != "user" {
                     let response = messages[responseIndex]
@@ -85,6 +88,7 @@ struct AgentRun: Codable, Identifiable, Equatable, Sendable {
     var stopRequested: Bool? = nil
     var historyReconciled: Bool? = nil
     var responseInstructions: String? = nil
+    var photos: [ChatPhoto]? = nil
     var modelSelection: HermesModelSelection? = nil
     var automaticModel: Bool? = nil
     var modelDecision: AutoModelDecision? = nil
@@ -106,7 +110,7 @@ struct AgentRun: Codable, Identifiable, Equatable, Sendable {
         }
     }
     enum CodingKeys: String, CodingKey {
-        case id, text, status, output, error, created, upstreamID, history, stopRequested, historyReconciled, responseInstructions, modelSelection, automaticModel, modelDecision
+        case id, text, status, output, error, created, upstreamID, history, stopRequested, historyReconciled, responseInstructions, modelSelection, automaticModel, modelDecision, photos
         case sessionID = "session_id"
     }
 }

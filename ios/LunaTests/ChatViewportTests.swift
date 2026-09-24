@@ -4,6 +4,40 @@ import Vision
 @testable import Luna
 
 final class ChatViewportTests: XCTestCase {
+    @MainActor func testPhotosAndReceivedFileCardsRenderWithoutLosingBottomPosition() async throws {
+        let store = AppStore(loadSavedState: false)
+        let session = AgentSession(id: "photos", title: "Photos and files", preview: "", source: "Test", updatedAt: 1, messageCount: 0)
+        let scope = UUID().uuidString
+        defer { try? ChatPhoto.removeFiles(scope: scope) }
+        let draft = try AttachmentTests.photo()
+        let photo = try ChatPhoto.save(draft, scope: scope)
+        store.photoDrafts[session.id] = [draft]
+        store.messages[session.id] = [ChatMessage(id: "photo", role: "user", content: "Photo caption", createdAt: 1, photos: [photo])]
+        try await withChat(store: store, session: session) { scroll, window in
+            await assertBottom(scroll, window: window)
+            let image = snapshot(window)
+            _ = try textBounds(containing: "Photo caption", in: image)
+            XCTAssertGreaterThan(orangePixels(image), 3000, "Sent photo and draft must render actual pixels")
+            let attachment = XCTAttachment(image: image); attachment.name = "Camera or library photo in chat and composer"; attachment.lifetime = .keepAlways; add(attachment)
+            store.photoDrafts[session.id] = []
+            store.messages[session.id] = [ChatMessage(id: "files", role: "assistant", content: "Here are your files.\n\n[Video: demo.mp4](http://jetson:8000/demo.mp4)\n\n[File: report.pdf](http://jetson:8000/report.pdf)", createdAt: 2)]
+            await assertBottom(scroll, window: window)
+            let files = snapshot(window)
+            _ = try textBounds(containing: "demo.mp4", in: files)
+            _ = try textBounds(containing: "report.pdf", in: files)
+            _ = try textBounds(containing: "Download", in: files)
+            let received = XCTAttachment(image: files); received.name = "Received video and file cards"; received.lifetime = .keepAlways; add(received)
+        }
+    }
+
+    private func orangePixels(_ image: UIImage) -> Int {
+        guard let image = image.cgImage else { return 0 }
+        var bytes = [UInt8](repeating: 0, count: image.width * image.height * 4)
+        let context = CGContext(data: &bytes, width: image.width, height: image.height, bitsPerComponent: 8, bytesPerRow: image.width * 4, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+        return stride(from: 0, to: bytes.count, by: 4).filter { bytes[$0] > 220 && bytes[$0 + 1] > 90 && bytes[$0 + 1] < 190 && bytes[$0 + 2] < 60 }.count
+    }
+
     @MainActor func testSharedComposerOnHomeAgentListAndChat() async throws {
         let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }

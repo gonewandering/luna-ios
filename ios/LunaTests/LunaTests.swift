@@ -666,7 +666,7 @@ final class LunaTests: XCTestCase {
     }
 }
 
-@MainActor private final class FakeBackend: AgentBackend {
+@MainActor final class FakeBackend: AgentBackend {
     let isDemo = true
     var submitted: [String] = [], streamIDs: [String] = []
     var submittedRuns: [AgentRun] = []

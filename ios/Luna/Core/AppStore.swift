@@ -10,6 +10,9 @@ import Observation
     var selectedSessionID: String?
     var unread: Set<String> = []
     var drafts: [String: String] = [:]
+    var photoDrafts: [String: [DraftPhoto]] = [:]
+    var canAttachPhotos: Bool { profile?.kind != .openAICompatible }
+    var photoScope: String { profile.map { "profile:" + $0.id } ?? serverAddress + "|" + hermesKey }
     var historyHasMore: [String: Bool] = [:]
     var sessionsHasMore = false
     var connected = false
@@ -131,7 +134,7 @@ import Observation
                 if let profile, profile.kind == .openAICompatible {
                     next = try CompatibleAgentClient(url: url, key: hermesKey, name: profile.name, defaultModel: profile.defaultModel,
                                                      file: file.deletingLastPathComponent().appending(path: "conversations.json"))
-                } else { next = HermesClient(url: url, key: hermesKey) }
+                } else { next = HermesClient(url: url, key: hermesKey, photoScope: photoScope) }
             }
             let features = try await next.capabilities()
             let page = try await next.sessions(offset: 0)
@@ -144,7 +147,7 @@ import Observation
                 UserDefaults.standard.set(serverAddress, forKey: "hermesAddress")
             }
             if file != cacheURL {
-                messages = [:]; unread = []; selectedSessionID = nil; drafts = [:]; historyFetchedAt = [:]
+                messages = [:]; unread = []; selectedSessionID = nil; drafts = [:]; photoDrafts = [:]; historyFetchedAt = [:]
                 if let cached = CacheFile.read(file) { messages = cached.messages; unread = cached.unread; historyFetchedAt = cached.fetchedAt ?? [:] }
             }
             cacheURL = file; backend = next
@@ -159,7 +162,7 @@ import Observation
                 guard !routingKey.isEmpty else { throw ServiceError(message: "Add your OpenAI API key in Settings to use Auto, or choose a model manually.") }
                 let catalog = try await next.models(refresh: false)
                 try Task.checkCancellation()
-                return try await AutoModelRouter(key: routingKey).choose(prompt: run.text, history: run.history ?? [], catalog: catalog)
+                return try await AutoModelRouter(key: routingKey).choose(prompt: run.text, history: run.history ?? [], catalog: catalog, photoCount: run.photos?.count ?? 0)
             }) { try ProtectedFile.write($0, to: journal) }
             coordinator = queue
             queue.onRun = { [weak self] run in
@@ -290,12 +293,17 @@ import Observation
     func send(_ sid: String) async {
         guard connected, let coordinator else { return }
         let text = (drafts[sid] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return }
+        let selectedPhotos = photoDrafts[sid] ?? []
+        guard !text.isEmpty || !selectedPhotos.isEmpty else { return }
         do {
+            guard selectedPhotos.isEmpty || canAttachPhotos else { throw ServiceError(message: "Photo attachments are available in Hermes chats.") }
+            guard selectedPhotos.count <= ChatPhoto.maxCount else { throw ServiceError(message: "Attach up to four photos per message.") }
             try checkModelReady(sid)
+            let photos = try selectedPhotos.map { try ChatPhoto.save($0, scope: photoScope) }
             _ = try await coordinator.admit(id: UUID().uuidString.lowercased(), sessionID: sid, text: text,
-                                           model: sessionModels[sid], automaticModel: usesAutoModel(sid))
+                                           model: sessionModels[sid], automaticModel: usesAutoModel(sid), photos: photos)
             if drafts[sid]?.trimmingCharacters(in: .whitespacesAndNewlines) == text { drafts[sid] = "" }
+            if photoDrafts[sid]?.map(\.id) == selectedPhotos.map(\.id) { photoDrafts[sid] = [] }
         } catch { self.error = error.localizedDescription }
     }
     func createSession(title: String) async {
@@ -493,6 +501,7 @@ import Observation
             try Credentials.save("", account: "openai-api-key")
             hermesKey = ""; openAIKey = ""; connected = false; backend = nil; coordinator = nil
             generation = UUID(); sessions = []; messages = [:]; runs = [:]; cacheURL = nil
+            drafts = [:]; photoDrafts = [:]
             notices.removeAll(); error = nil; reconnecting = false
             modelPreferences = [:]; modelCatalog = nil; changingModels = []; supportsSessionModels = false
         } catch { self.error = error.localizedDescription }

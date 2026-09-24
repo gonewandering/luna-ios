@@ -248,6 +248,7 @@ struct HomeSession: Identifiable {
         try memory.removeAgent(id)
         try removeLegacyCopy(profile)
         try writeKey("", profile.keyAccount)
+        try ChatPhoto.removeFiles(scope: "profile:" + profile.id)
         let directory = AgentFiles.directory(id, root: root)
         if FileManager.default.fileExists(atPath: directory.path) { try FileManager.default.removeItem(at: directory) }
     }

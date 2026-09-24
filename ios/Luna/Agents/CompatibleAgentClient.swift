@@ -76,6 +76,7 @@ import Foundation
         try change { state in if let index = state.sessions.firstIndex(where: { $0.id == sessionID }) { state.sessions[index].model = selection.model } }
     }
     func submit(_ run: AgentRun) async throws -> String {
+        guard (run.photos ?? []).isEmpty else { throw ServiceError(message: "Photo attachments are available in Hermes chats.", statusCode: 400) }
         if let previous = state.requests[run.id] {
             guard previous.sessionID == run.sessionID, previous.text == run.text else { throw ServiceError(message: "That request ID belongs to a different task.", statusCode: 409) }
             return run.id

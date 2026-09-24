@@ -48,8 +48,10 @@ struct ChatCache: Codable {
 
 enum ProtectedFile {
     static func write<T: Encodable>(_ value: T, to url: URL) throws {
+        try writeData(JSONEncoder().encode(value), to: url)
+    }
+    static func writeData(_ data: Data, to url: URL) throws {
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        let data = try JSONEncoder().encode(value)
         try data.write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
         var values = URLResourceValues()
         values.isExcludedFromBackup = true

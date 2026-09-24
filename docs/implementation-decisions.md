@@ -94,6 +94,16 @@ Chat uses a bottom scroll anchor for initial positioning and top alignment for s
 
 Textual renders Markdown, highlighting and tables. Native code cards preserve source exactly for copying, including incomplete streaming fences. Highlighting for very large blocks is bounded until expanded. Content is rendered as data, never executed.
 
+## Chat photos and host-served attachments
+
+The session composer uses `PhotosPicker` for selected library items and `UIImagePickerController` for camera capture, requesting camera permission only on demand. ImageIO normalizes orientation, bounds resolution/encoded size, and re-encodes pixels without EXIF/GPS. A draft is per-session and in memory. Admission writes immutable, SHA-256-addressed JPEG files under a hashed agent scope before persisting their descriptors in the run journal. Protected files are excluded from backup and removed with the agent. Streams therefore never rewrite base64 images. Missing or changed image files fail before submission; idempotency and history reconciliation include photo identity. Existing journals decode without attachments.
+
+`POST /v1/runs` uses `input: [{role: "user", content: [{type: "text", text: "…"}, {type: "image_url", image_url: {url: "data:image/jpeg;base64,…"}}]}]` for photos. The outer user-message array is required by the [Hermes Runs handler](https://github.com/NousResearch/hermes-agent/blob/main/gateway/platforms/api_server_runs.py); content parts alone are not equivalent. Text-only payloads retain the original string format. This requires a current multimodal-capable Hermes implementation; no dedicated photo capability flag is advertised. Auto uses the attachment count and catalog vision hints without sending image bytes to the selector.
+
+Received attachments are derived from Markdown in both live output and history, with structured `image_url`, `video_url`, and URL-backed file parts normalized to the same format. Fenced/inline code stays code. Explicit `Video:`/`File:` link labels handle extensionless URLs. Photos use downsampled native previews; videos download on demand and play through AVPlayer; other files use Quick Look and the system share sheet. Remote video codecs and file preview support depend on iOS. No host file server is implicitly started and filesystem paths are not rewritten into invented URLs.
+
+A separate ephemeral URLSession downloads media without agent credentials, cookies, or credential storage. It validates URLs/redirects, checks HTTP status, bounds downloads (20 MB images; 250 MB video/files), and uses protected temporary files owned by the chat card through preview/sharing. HTTPS is supported universally; HTTP media permits tailnet addresses, MagicDNS, and local names. Narrow ATS exceptions cover `.ts.net`, `100.64.0.0/10`, and `fd7a:115c:a1e0::/48`; API connection validation still requires HTTPS. iOS 18+ supports these CIDR exceptions according to [Apple’s ATS documentation](https://developer.apple.com/documentation/bundleresources/information-property-list/nsapptransportsecurity/nsexceptiondomains). Host availability, Tailscale connectivity, ACLs, and expiring links remain server/network concerns; failures show a retry action and an open-link fallback.
+
 ## References
 
 - [Hermes HTTP API](https://hermes-agent.nousresearch.com/docs/user-guide/features/api-server)

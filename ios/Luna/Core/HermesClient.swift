@@ -3,6 +3,7 @@ import Foundation
 enum HermesResponseFormat {
     static let instructions = """
     Response presentation for Luna: the chat supports Markdown and syntax-highlighted code. When returning source code, shell commands, configuration, or diffs, show the actual content in fenced Markdown code blocks with a language tag such as swift, python, javascript, typescript, json, bash, or diff. Preserve indentation and blank lines. Put filenames and explanations outside the fences. Use unified diff format inside diff fences for patches. Do not replace requested code with a spoken summary: the full result is displayed in chat. If the user requests another output format or an exact response, follow that request instead.
+    To deliver photos, videos, or files, return absolute HTTP(S) URLs accessible from the user's phone, including a host's tailnet address and file-server port. Use ![description](<URL>) for photos, [Video: filename](<URL>) for videos, and [File: filename](<URL>) for other files. Local filesystem paths alone are not downloadable. Use an existing file server when available; do not claim a file is accessible unless it is served. Luna retrieves these URLs without the Hermes API key, so use tailnet-accessible or signed links. Videos and files download when tapped.
     """
 }
 
@@ -31,8 +32,10 @@ extension AgentBackend { func shutdown() async {} }
 @MainActor final class HermesClient: AgentBackend {
     let isDemo = false
     let http: APIClient
-    init(url: URL, key: String, configuration: URLSessionConfiguration = .ephemeral) {
+    private let photoScope: String
+    init(url: URL, key: String, configuration: URLSessionConfiguration = .ephemeral, photoScope: String? = nil) {
         http = APIClient(url: url, token: key, configuration: configuration)
+        self.photoScope = photoScope ?? url.absoluteString + "|" + key
     }
     func capabilities() async throws -> JSONObject {
         let value: JSONObject = try await http.call("/v1/capabilities")
@@ -66,8 +69,10 @@ extension AgentBackend { func shutdown() async {} }
             let role = row["role"]?.string ?? "assistant"
             guard ["user", "assistant", "tool"].contains(role) else { return nil }
             let messageID = row["id"]?.string ?? row["id"]?.number.map { String(Int($0)) } ?? "history-\(offset + index)"
+            let photos = ChatPhoto.fromHistory(row["content"], scope: photoScope)
             return ChatMessage(id: messageID, role: role, content: Self.content(row["content"]),
-                               createdAt: Self.timestamp(row["timestamp"] ?? row["created_at"]), toolName: row["tool_name"]?.string)
+                               createdAt: Self.timestamp(row["timestamp"] ?? row["created_at"]), toolName: row["tool_name"]?.string,
+                               photos: photos.isEmpty ? nil : photos)
         }
         return HistoryPage(messages: messages, hasMore: value["has_more"]?.bool ?? (raw.count == 100), resolvedSessionID: value["session_id"]?.string ?? id)
     }
@@ -78,6 +83,12 @@ extension AgentBackend { func shutdown() async {} }
         // Persisted with admission so retries after an app update have exactly
         // the same payload, including older requests without instructions.
         var body: JSONObject = ["session_id": .string(run.sessionID), "input": .string(run.text)]
+        if let photos = run.photos, !photos.isEmpty {
+            guard photos.count <= ChatPhoto.maxCount else { throw ServiceError(message: "Attach up to four photos per message.", statusCode: 400) }
+            var parts: [JSONValue] = run.text.isEmpty ? [] : [.object(["type": .string("text"), "text": .string(run.text)])]
+            parts += try photos.map { try $0.contentPart() }
+            body["input"] = .array([.object(["role": .string("user"), "content": .array(parts)])])
+        }
         if let instructions = run.responseInstructions { body["instructions"] = .string(instructions) }
         if let selection = run.modelSelection {
             body["model"] = .string(selection.model)
@@ -177,11 +188,7 @@ extension AgentBackend { func shutdown() async {} }
             return parts.compactMap { part -> String? in
                 guard let row = part.object else { return nil }
                 if ["text", "output_text", "input_text"].contains(row["type"]?.string ?? "") { return row["text"]?.string }
-                if ["image_url", "input_image"].contains(row["type"]?.string ?? "") {
-                    let url = row["image_url"]?.string ?? row["image_url"]?.object?["url"]?.string ?? ""
-                    return url.hasPrefix("https://") ? "![Image](\(url))" : nil
-                }
-                return nil
+                return ReceivedAttachment.markdown(row)
             }.joined(separator: "\n\n")
         }
         guard let value, value != .null, let data = try? JSONEncoder().encode(value) else { return "" }

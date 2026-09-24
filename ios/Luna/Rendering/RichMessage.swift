@@ -106,14 +106,20 @@ struct RichMessage: View, Equatable {
             ForEach(MarkdownBlocks.parse(text)) { block in
                 switch block.kind {
                 case .markdown:
-                    StructuredText(markdown: block.content)
-                        .textual.textSelection(.enabled)
-                        .textual.inlineStyle(.luna)
-                        .textual.highlighterTheme(.luna)
-                        .textual.structuredTextStyle(.gitHub)
-                        .foregroundStyle(Palette.ink)
-                        .font(.system(size: 16))
-                        .tint(Palette.forest)
+                    ForEach(MediaBlocks.parse(block.content)) { part in
+                        if let attachment = part.attachment {
+                            ReceivedAttachmentView(attachment: attachment).id(attachment.id)
+                        } else {
+                            StructuredText(markdown: part.text)
+                                .textual.textSelection(.enabled)
+                                .textual.inlineStyle(.luna)
+                                .textual.highlighterTheme(.luna)
+                                .textual.structuredTextStyle(.gitHub)
+                                .foregroundStyle(Palette.ink)
+                                .font(.system(size: 16))
+                                .tint(Palette.forest)
+                        }
+                    }
                 case .code(let language): CodeCard(language: language, source: block.content)
                 }
             }

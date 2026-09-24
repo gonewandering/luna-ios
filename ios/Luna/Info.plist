@@ -33,6 +33,15 @@
 		<true/>
 		<key>NSExceptionDomains</key>
 		<dict>
+			<key>ts.net</key>
+			<dict>
+				<key>NSIncludesSubdomains</key><true/>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key><true/>
+			</dict>
+			<key>100.64.0.0/10</key>
+			<dict><key>NSExceptionAllowsInsecureHTTPLoads</key><true/></dict>
+			<key>fd7a:115c:a1e0::/48</key>
+			<dict><key>NSExceptionAllowsInsecureHTTPLoads</key><true/></dict>
 			<key>127.0.0.1</key>
 			<dict>
 				<key>NSExceptionAllowsInsecureHTTPLoads</key>
@@ -49,6 +58,8 @@
 	<string>Connect to your Luna service and Hermes agents on your local network.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Talk to your Hermes agents and hear their responses.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Take photos to attach to your messages to Hermes.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

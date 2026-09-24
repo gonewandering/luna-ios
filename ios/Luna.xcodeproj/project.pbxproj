@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		04DA6E5C955CE75DCC265287 /* LunaVoiceTools.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF7A644E6F06D5D82786CBCC /* LunaVoiceTools.swift */; };
 		0BA4C4EF3498F60D61A34FE0 /* LunaTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDF59CED60218ECEC6977138 /* LunaTests.swift */; };
+		1CAB49EBF924D4AEA7CA0B46 /* ChatPhotoControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = BABAEBA38760C0ABFB68D8CD /* ChatPhotoControls.swift */; };
 		1F5EB897369B687077E805F9 /* DemoBackend.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D003B67552AAA3BB9F8F809 /* DemoBackend.swift */; };
 		2FC82693FCFF9BA868808220 /* LiveConnectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74B13D10D3551746B180EB9F /* LiveConnectionTests.swift */; };
 		2FD3D00D0BE5713FE25A5594 /* WebRTC in Frameworks */ = {isa = PBXBuildFile; productRef = 6AC5D36286B41C269A1986A1 /* WebRTC */; };
@@ -27,8 +28,10 @@
 		5E9BFA8A26236D8CD24BA69D /* LunaStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFDC69E0DD3B2E98DCD51B29 /* LunaStore.swift */; };
 		61BD9CBBAEA8BB5A1D7D6061 /* OpenAILiveSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9FDE2C62DFC153BB6FD28977 /* OpenAILiveSession.swift */; };
 		672161572B5581E4732EFECF /* NoticeCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = B42DC2311D4BE8F5AFA81672 /* NoticeCard.swift */; };
+		706B7C69FC62D19D069703F6 /* ChatPhoto.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B62B1520960DBF0EB2897C3 /* ChatPhoto.swift */; };
 		741130FDCBC245770ED2136D /* MultiAgentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F43D3DE575F4C271CC601EDF /* MultiAgentTests.swift */; };
 		8C8F4CEF9CECEAE441078C65 /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3A7EBAEB8A9F84547ED0E2C /* ChatView.swift */; };
+		8CA965B379BB44FECF9AC98C /* ReceivedAttachmentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9C1C28D18A18F2EF864AD56 /* ReceivedAttachmentView.swift */; };
 		8F64EB25775D2239FB3A01BB /* SessionModelPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C8ADDF94DDDFF9CE88126F0 /* SessionModelPicker.swift */; };
 		94F577100A1F4DEF82D0F97B /* CompatibleAgentClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 443952BAE69995706818E4F6 /* CompatibleAgentClient.swift */; };
 		95C49C076A281E3B6B570668 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 3EB635E36E87DF63F0E380B9 /* LaunchScreen.storyboard */; };
@@ -43,8 +46,10 @@
 		D2B8E3D89720D284733EF140 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA21F9D657ACA2D410DE710F /* Theme.swift */; };
 		DCF902F08F9196B8D84C70F6 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98A4E4C22825B026F4E93CD2 /* Models.swift */; };
 		E0FBB3F6F043F32EA09C1436 /* LunaApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16F06C8FB598F034AF50D6DC /* LunaApp.swift */; };
+		EA21E21C587025A8C3C3457A /* AttachmentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF046A466A92E8ACD7BDDAF0 /* AttachmentTests.swift */; };
 		EB8D5DA8E42E32A82037A7BD /* TaskHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4E6D1A2787BCD84F2CA0FF5 /* TaskHistoryView.swift */; };
 		F40EC69174E6D5E09403DF6B /* AutoModelRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3AA6044B370434508DB9A721 /* AutoModelRouter.swift */; };
+		F50262065CEB9B516AC6C133 /* ReceivedAttachment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4EA22364603F42C736FC41B3 /* ReceivedAttachment.swift */; };
 		FB1B524A7D126D8634BD2B1E /* MessageComposer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 302DF9BB207518423723E66D /* MessageComposer.swift */; };
 		FF8C1079AA50B6511BC84EF8 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 090F46C385278EFF03C80323 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
@@ -81,10 +86,12 @@
 		3F769306A7E4F688823015D8 /* Persistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Persistence.swift; sourceTree = "<group>"; };
 		443952BAE69995706818E4F6 /* CompatibleAgentClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompatibleAgentClient.swift; sourceTree = "<group>"; };
 		48182F45BCE1C3A1B0919F6F /* LunaTextRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LunaTextRouter.swift; sourceTree = "<group>"; };
+		4EA22364603F42C736FC41B3 /* ReceivedAttachment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReceivedAttachment.swift; sourceTree = "<group>"; };
 		5236D692D2EABE6416E275AA /* AgentProfile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentProfile.swift; sourceTree = "<group>"; };
 		576E817E7F2EF6EBD3E0896C /* LocalMemory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalMemory.swift; sourceTree = "<group>"; };
 		5C8ADDF94DDDFF9CE88126F0 /* SessionModelPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionModelPicker.swift; sourceTree = "<group>"; };
 		623B08465663BD7645249282 /* HermesModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HermesModels.swift; sourceTree = "<group>"; };
+		6B62B1520960DBF0EB2897C3 /* ChatPhoto.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatPhoto.swift; sourceTree = "<group>"; };
 		73A13354741DF287DAE72D33 /* ChatViewportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatViewportTests.swift; sourceTree = "<group>"; };
 		740E3247864031E85FC89C7E /* AgentsSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentsSettingsView.swift; sourceTree = "<group>"; };
 		74B13D10D3551746B180EB9F /* LiveConnectionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveConnectionTests.swift; sourceTree = "<group>"; };
@@ -93,15 +100,18 @@
 		980142E654C74325A9380E31 /* LunaHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LunaHomeView.swift; sourceTree = "<group>"; };
 		98A4E4C22825B026F4E93CD2 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
 		9FDE2C62DFC153BB6FD28977 /* OpenAILiveSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenAILiveSession.swift; sourceTree = "<group>"; };
+		AF046A466A92E8ACD7BDDAF0 /* AttachmentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AttachmentTests.swift; sourceTree = "<group>"; };
 		B42DC2311D4BE8F5AFA81672 /* NoticeCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoticeCard.swift; sourceTree = "<group>"; };
+		BABAEBA38760C0ABFB68D8CD /* ChatPhotoControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatPhotoControls.swift; sourceTree = "<group>"; };
 		BDF59CED60218ECEC6977138 /* LunaTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LunaTests.swift; sourceTree = "<group>"; };
 		C4E6D1A2787BCD84F2CA0FF5 /* TaskHistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskHistoryView.swift; sourceTree = "<group>"; };
 		C5AFDF72DEE4AD51379C4317 /* TransientNotices.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransientNotices.swift; sourceTree = "<group>"; };
 		C60F18A533C89C20F2AA5120 /* LunaLiveTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = LunaLiveTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		CAD6FE67F1EEF86E27824070 /* LunaTextRouterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LunaTextRouterTests.swift; sourceTree = "<group>"; };
 		CB0008ECFC7D0FA5A4299AA9 /* LunaComposer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LunaComposer.swift; sourceTree = "<group>"; };
-		D399E4DA6B951325F78CD25C /* Luna.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Luna.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		D399E4DA6B951325F78CD25C /* Luna.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Luna.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		D3A7EBAEB8A9F84547ED0E2C /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
+		D9C1C28D18A18F2EF864AD56 /* ReceivedAttachmentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReceivedAttachmentView.swift; sourceTree = "<group>"; };
 		DF7A644E6F06D5D82786CBCC /* LunaVoiceTools.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LunaVoiceTools.swift; sourceTree = "<group>"; };
 		DFDC69E0DD3B2E98DCD51B29 /* LunaStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LunaStore.swift; sourceTree = "<group>"; };
 		E239F62A1C9244159CFDE4A6 /* LunaTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = LunaTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -158,11 +168,13 @@
 				0DB6B892CDF925D10639196B /* APIClient.swift */,
 				0959E3069C4093686B784253 /* AppStore.swift */,
 				3AA6044B370434508DB9A721 /* AutoModelRouter.swift */,
+				6B62B1520960DBF0EB2897C3 /* ChatPhoto.swift */,
 				7D003B67552AAA3BB9F8F809 /* DemoBackend.swift */,
 				95360DD900EF04092764F94B /* HermesClient.swift */,
 				623B08465663BD7645249282 /* HermesModels.swift */,
 				98A4E4C22825B026F4E93CD2 /* Models.swift */,
 				3F769306A7E4F688823015D8 /* Persistence.swift */,
+				4EA22364603F42C736FC41B3 /* ReceivedAttachment.swift */,
 				E81F3F231CEEBA56E46D061F /* RunCoordinator.swift */,
 				C5AFDF72DEE4AD51379C4317 /* TransientNotices.swift */,
 			);
@@ -172,6 +184,7 @@
 		561DF00A51072B22238E0036 /* LunaTests */ = {
 			isa = PBXGroup;
 			children = (
+				AF046A466A92E8ACD7BDDAF0 /* AttachmentTests.swift */,
 				73A13354741DF287DAE72D33 /* ChatViewportTests.swift */,
 				BDF59CED60218ECEC6977138 /* LunaTests.swift */,
 				CAD6FE67F1EEF86E27824070 /* LunaTextRouterTests.swift */,
@@ -206,6 +219,7 @@
 			isa = PBXGroup;
 			children = (
 				740E3247864031E85FC89C7E /* AgentsSettingsView.swift */,
+				BABAEBA38760C0ABFB68D8CD /* ChatPhotoControls.swift */,
 				D3A7EBAEB8A9F84547ED0E2C /* ChatView.swift */,
 				CB0008ECFC7D0FA5A4299AA9 /* LunaComposer.swift */,
 				980142E654C74325A9380E31 /* LunaHomeView.swift */,
@@ -245,6 +259,7 @@
 		D44E598D753FB78AC538B732 /* Rendering */ = {
 			isa = PBXGroup;
 			children = (
+				D9C1C28D18A18F2EF864AD56 /* ReceivedAttachmentView.swift */,
 				1B489908E6021F97F42E5BE5 /* RichMessage.swift */,
 			);
 			path = Rendering;
@@ -363,6 +378,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				EA21E21C587025A8C3C3457A /* AttachmentTests.swift in Sources */,
 				391A80FC91E55B18EFBF2424 /* ChatViewportTests.swift in Sources */,
 				0BA4C4EF3498F60D61A34FE0 /* LunaTests.swift in Sources */,
 				5C14E830CC489AE7C2A9AEEF /* LunaTextRouterTests.swift in Sources */,
@@ -379,6 +395,8 @@
 				32928C20963CA975535D15AD /* AgentsSettingsView.swift in Sources */,
 				588015B16EEC2ED962C871BF /* AppStore.swift in Sources */,
 				F40EC69174E6D5E09403DF6B /* AutoModelRouter.swift in Sources */,
+				706B7C69FC62D19D069703F6 /* ChatPhoto.swift in Sources */,
+				1CAB49EBF924D4AEA7CA0B46 /* ChatPhotoControls.swift in Sources */,
 				8C8F4CEF9CECEAE441078C65 /* ChatView.swift in Sources */,
 				94F577100A1F4DEF82D0F97B /* CompatibleAgentClient.swift in Sources */,
 				1F5EB897369B687077E805F9 /* DemoBackend.swift in Sources */,
@@ -396,6 +414,8 @@
 				672161572B5581E4732EFECF /* NoticeCard.swift in Sources */,
 				61BD9CBBAEA8BB5A1D7D6061 /* OpenAILiveSession.swift in Sources */,
 				531DB50E32855928218BC0A3 /* Persistence.swift in Sources */,
+				F50262065CEB9B516AC6C133 /* ReceivedAttachment.swift in Sources */,
+				8CA965B379BB44FECF9AC98C /* ReceivedAttachmentView.swift in Sources */,
 				3EA622AD3DEE02C5B7FCF654 /* RichMessage.swift in Sources */,
 				C9679524C5D01422C4D71C20 /* RunCoordinator.swift in Sources */,
 				8F64EB25775D2239FB3A01BB /* SessionModelPicker.swift in Sources */,

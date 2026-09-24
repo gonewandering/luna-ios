@@ -23,7 +23,7 @@ Choose **OpenAI compatible** for a server exposing `/models` and streaming `/cha
 
 To rename an agent, open **Settings → agent → Name in Luna → Save name**. Names persist locally, work offline, and do not interrupt tasks or rename the remote service. Luna resolves these names before choosing an agent; duplicate names require clarification.
 
-This version uses API keys. It does not implement ChatGPT/Codex OAuth or use subscription login tokens for voice API access. Each user's key is entered at runtime, never embedded in the app. Each agent profile has its own Keychain entry and isolated conversation files; Luna’s voice key is only sent to OpenAI. HTTPS is required except for loopback development. HTTP redirects are rejected to avoid forwarding credentials.
+This version uses API keys. It does not implement ChatGPT/Codex OAuth or use subscription login tokens for voice API access. Each user's key is entered at runtime, never embedded in the app. Each agent profile has its own Keychain entry and isolated conversation files; Luna’s voice key is only sent to OpenAI. Agent API connections require HTTPS except for loopback development. Authenticated HTTP redirects are rejected to avoid forwarding credentials.
 
 The development launcher can provision the simulator from the existing ignored `service/.env`, without starting the old service:
 
@@ -35,6 +35,24 @@ It reads `HERMES_BASE_URL`, `HERMES_API_KEY`, and `OPENAI_API_KEY` (preferring t
 
 For a physical iPhone, select your Apple development team in Xcode's Signing settings. Allow microphone access when starting voice.
 
+## Photos and received files
+
+Inside a Hermes session, tap **+ → Take Photo** or **Photo Library**. Attach up to four pictures, remove any unwanted preview, and send with or without text. Photos are resized to at most 1,600 pixels on the long edge and encoded as JPEGs of at most 750 KB each, with location/EXIF metadata removed. Only selected library items are read; camera access is requested when taking a photo. Unsent photos stay in that session’s draft while the app is open. Submitted photos persist with the request for recovery and remain visible in chat.
+
+Sending pictures requires a Hermes version whose Runs API passes multimodal input through to the agent, and a model that can interpret images. Auto avoids models explicitly marked as lacking vision and receives only the photo count, not image bytes. Generic OpenAI-compatible chats currently support text submissions only.
+
+Hermes can return files hosted on a reachable HTTP(S) file server. The phone must have Tailscale connected and permission to reach that host and port. Luna shows photos inline; tap **Download** on a video or file for playback/Quick Look and **Share** to save it to Files or another app. Image downloads are limited to 20 MB; videos and other files to 250 MB. Unsupported preview formats can still be saved or opened using **Open link**. Downloaded copies are temporary; use Share to keep them.
+
+Use absolute URLs, for example:
+
+```markdown
+![Chart](<http://jetson:8000/chart.png>)
+[Video: demo.mp4](<http://100.100.20.30:8000/demo.mp4>)
+[File: report.pdf](<https://jetson.example-tailnet.ts.net/files/report.pdf>)
+```
+
+Images and common file URLs are recognized by extension; the `Video:` and `File:` labels also work with extensionless or signed download URLs. This works in live replies and saved conversation history. Luna asks Hermes to use this format, but an actual file server must already expose the referenced file; a host filesystem path alone is insufficient. Media downloads do not receive the agent’s API key or cookies. Use tailnet access controls or signed links if the file server requires authorization. HTTP media links can use MagicDNS names, `.ts.net` hosts, and Tailscale IPv4/IPv6 addresses; other Internet hosts require HTTPS.
+
 ## What Luna does
 
 - Keeps multiple named agents, independent connections, and the five most recent known sessions on Home. Cached conversations remain available when an agent is offline.
@@ -45,6 +63,7 @@ For a physical iPhone, select your Apple development team in Xcode's Signing set
 - Lets each session request its own agent model. Tap the model control above the message box (or **… → Choose model**) to search the server's available models by model/provider and refresh the catalog. Choices apply to both typed and voice prompts and survive reopening.
 - Offers **Auto** in the session model picker. Luna chooses a lightweight model for simple questions, a balanced model for ordinary work, and a stronger model for planning or difficult tasks. Each new request gets its own choice using recent conversation context; the requested model and brief reason appear in chat and the picker.
 - Renders Markdown, selectable text, tables, remote images, and tool activity. Code cards use a dark syntax palette with language labels, exact copying, line counts, and horizontal scrolling or optional line wrapping. Common language aliases and fenced JSON are recognized; incomplete streamed blocks remain visible.
+- Sends camera or photo-library pictures directly to Hermes, with removable previews and optional captions. Receives photos, videos, and downloadable files through links, including files served by a host on the tailnet.
 - Discovers Hermes' configured toolsets and skills, including reported MCP tools. The full configured Hermes tool surface is available through task delegation; Hermes enforces its own permissions and provider credentials.
 - Shows approval requests with allow-once and deny controls. Voice cannot approve tools for the user.
 - Starts Luna voice from Home, agent lists, or session chat, switches agent/session without restarting voice, and pauses its microphone when asked. Tap **Resume microphone** to speak again. Microphone mute, speaker mute, agent cancellation, and ending voice remain separate controls.
@@ -97,6 +116,6 @@ The previous Python helper remains in `service/` as an optional reference implem
 
 The Jetson HTTP API accepts its key and serves sessions, history, and capability catalogs. A direct native run returned the requested marker and saved it in the correct Hermes history. The earlier Anthropic authentication failure did not recur in this check. Luna did not change Hermes' provider or copy its OpenAI key to the Jetson.
 
-Physical-device microphone quality, screen-lock audio, AirPods, interruptions, and cellular handoffs still need device validation. Live approval/cancellation against this Jetson and TestFlight distribution are not yet verified. File uploads, push notifications, arbitrary local artifact downloads, and cache/journal compaction for very long histories remain outside this version. Generic compatible endpoints do not provide Hermes’ durable remote-run recovery, tools catalog, or approval APIs.
+Physical-device camera capture and live multimodal submissions, microphone quality, screen-lock audio, AirPods, interruptions, and cellular handoffs still need device validation. Live approval/cancellation against this Jetson and TestFlight distribution are not yet verified. Non-image uploads, push notifications, retrieval of unserved host filesystem paths, and cache/journal compaction for very long histories remain outside this version. Generic compatible endpoints do not provide Hermes’ durable remote-run recovery, tools catalog, or approval APIs.
 
 See [verification](docs/verification.md), [implementation decisions](docs/implementation-decisions.md), [the multi-agent plan](docs/multi-agent-plan.md), and [the original plan](docs/ios-hermes-plan.md).

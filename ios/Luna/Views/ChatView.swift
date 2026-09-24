@@ -6,6 +6,8 @@ struct ChatView: View {
     @State private var sending = false
     @State private var showingModels = false
     @State private var showingTasks = false
+    @State private var showingPhotoOptions = false
+    @State private var importingPhotos = false
     @State private var followingLatest = true
     @State private var userScrolling = false
     @State private var bottomScrollRequest = 0
@@ -89,6 +91,7 @@ struct ChatView: View {
             scrollPosition.scrollTo(edge: .bottom)
         }
         .safeAreaInset(edge: .bottom, spacing: 0) { composer }
+        .background(ChatPhotoControls(store: store, sessionID: session.id, showingOptions: $showingPhotoOptions, importing: $importingPhotos))
         .navigationTitle(session.title).navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(Palette.canvas, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
@@ -157,9 +160,17 @@ struct ChatView: View {
                     Spacer(minLength: 8)
                     if store.changingModels.contains(session.id) { ProgressView().controlSize(.mini) }
                 }.padding(.horizontal, 5)
+                let photos = store.photoDrafts[session.id] ?? []
+                if !photos.isEmpty {
+                    PhotoDraftStrip(photos: photos, disabled: sending || importingPhotos) { id in
+                        store.photoDrafts[session.id]?.removeAll { $0.id == id }
+                    }
+                }
+                if importingPhotos { ProgressView("Preparing photos…").font(.caption).foregroundStyle(Palette.muted) }
                 MessageComposer(text: draft, placeholder: "Ask \(store.agentName)…", messageLabel: "Message to " + store.agentName,
-                    sending: sending, canSend: store.connected && !store.changingModels.contains(session.id),
-                    voiceIsActive: false, focus: $composerFocused,
+                    sending: sending || importingPhotos, canSend: store.connected && !store.changingModels.contains(session.id),
+                    voiceIsActive: false, hasAttachments: !photos.isEmpty, canAddPhoto: photos.count < ChatPhoto.maxCount,
+                    onAddPhoto: store.canAttachPhotos ? { showingPhotoOptions = true } : nil, focus: $composerFocused,
                     onMicrophone: { Task { await store.startVoice(session.id) } },
                     onSend: {
                         // Only a send from this composer explicitly resumes following.
@@ -182,7 +193,7 @@ private struct RunCard: View {
     let run: AgentRun
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
-            MessageView(message: ChatMessage(id: run.id + "-user", role: "user", content: run.text, createdAt: run.created))
+            MessageView(message: ChatMessage(id: run.id + "-user", role: "user", content: run.text, createdAt: run.created, photos: run.photos))
             if run.isActive {
                 HStack {
                     ProgressView().controlSize(.mini)
@@ -246,8 +257,11 @@ struct MessageView: View {
         if message.role == "user" {
             VStack(alignment: .trailing, spacing: 7) {
                 Text("YOU").font(.system(size: 9, weight: .semibold)).tracking(1.4).foregroundStyle(Palette.muted)
-                Text(message.content).font(.body).textSelection(.enabled).padding(16)
-                    .background(Palette.userBubble, in: RoundedRectangle(cornerRadius: 19))
+                ForEach(message.photos ?? []) { photo in ChatPhotoView(photo: photo) }
+                if !message.content.isEmpty {
+                    Text(message.content).font(.body).textSelection(.enabled).padding(16)
+                        .background(Palette.userBubble, in: RoundedRectangle(cornerRadius: 19))
+                }
             }.frame(maxWidth: .infinity, alignment: .trailing).padding(.leading, 30)
         } else if message.role == "tool" {
             DisclosureGroup {
@@ -264,6 +278,7 @@ struct MessageView: View {
                         .foregroundStyle(Palette.muted).accessibilityLabel("Copy response")
                 }.foregroundStyle(Palette.forest)
                 RichMessage(text: message.content).equatable()
+                ForEach(message.photos ?? []) { photo in ChatPhotoView(photo: photo) }
             }
         }
     }
