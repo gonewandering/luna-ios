@@ -2,6 +2,15 @@
 
 Standalone refactor verified September 18, 2026, with Xcode 26.3 and an iPhone 16 Pro simulator running iOS 18.5. The previous Luna Python helper was stopped before direct integration checks; nothing was listening on its port 8787.
 
+## Chat run ordering and scrolling — September 23, 2026
+
+- All 66 ordinary tests passed on iPhone 16 Pro / iOS 18.5 with Xcode 26.3. All six rendered viewport tests also passed on iPhone 17 Pro / iOS 26.2.
+- The added delegated-run regression failed against the prior implementation: a new Luna/API request moved a reader from the top of the history to the bottom. The final checks preserve the offset during new requests, streamed growth and history reconciliation, and verify that returning to the bottom resumes following. A reader 120 points above the bottom stays put even with the composer inset.
+- Rendered checks cover short conversations, varied message heights, new tool activity and approvals, multiline drafts, keyboard presentation/dismissal, terminal status changes, and reconciliation while following. Screenshot text bounds verify that activity sits between its own prompt and the next queued prompt, approvals precede the response, and the final response ends above the composer without excess blank space.
+- Inspected the retained ordering and final-response screenshots on both simulator OS versions. These checks use local fixtures; no live API calls were needed.
+
+Logs and screenshot attachments are retained locally under `artifacts/chat-feed-stability/` and in the Xcode test result bundles.
+
 ## Shared text/voice input and launch artwork — September 19, 2026
 
 - All 55 ordinary tests passed. After correcting the agent-list inset, both rendered viewport checks passed again; after the final response-validation change, all seven text-routing tests and the shared-composer view check passed again. Coverage includes clarification history, explicit agent/session admission, duplicate-send suppression, reasoning/tool-output continuation, malformed/incomplete response rejection, bounded loops, cancellation, and preserving drafts when the OpenAI key is missing.

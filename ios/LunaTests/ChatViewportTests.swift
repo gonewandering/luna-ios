@@ -1,5 +1,6 @@
 import XCTest
 import SwiftUI
+import Vision
 @testable import Luna
 
 final class ChatViewportTests: XCTestCase {
@@ -88,6 +89,12 @@ final class ChatViewportTests: XCTestCase {
         let image = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in window.drawHierarchy(in: window.bounds, afterScreenUpdates: true) }
         let attachment = XCTAttachment(image: image); attachment.name = "Chat follows streamed content when at bottom"; attachment.lifetime = .keepAlways
         add(attachment)
+
+        store.messages[session.id]?.append(ChatMessage(id: "server-prompt", role: "user", content: store.runs["stream"]!.text, createdAt: 22))
+        store.messages[session.id]?.append(ChatMessage(id: "server-response", role: "assistant", content: store.runs["stream"]!.output, createdAt: 23))
+        store.runs["stream"]?.status = "completed"
+        store.runs["stream"]?.historyReconciled = true
+        await assertBottom(scroll, window: window)
     }
 
     @MainActor func testUserScrolledUpIsNotMovedByResponseUpdatesOrReconciliation() async throws {
@@ -131,6 +138,133 @@ final class ChatViewportTests: XCTestCase {
         await settle(scroll, window: window)
         XCTAssertEqual(scroll.contentOffset.y, restingOffset, accuracy: 3, "Reconciliation moved a scrolled-up user")
         XCTAssertTrue(ChatView.visibleRuns(sessionID: session.id, runs: store.runs.values).isEmpty, "Run should be reconciled out of the visible set")
+
+        // A voice/API submission is not a request to leave the history being read.
+        store.runs["delegated"] = AgentRun(id: "delegated", sessionID: session.id, text: "Work submitted by Luna", status: "submitting", output: "", created: 25)
+        await settle(scroll, window: window)
+        XCTAssertEqual(scroll.contentOffset.y, restingOffset, accuracy: 3, "A delegated run moved a scrolled-up user")
+
+        // Returning to the bottom resumes following, without sending another prompt.
+        scroll.setContentOffset(CGPoint(x: 0, y: scroll.contentSize.height - scroll.bounds.height + scroll.adjustedContentInset.bottom), animated: false)
+        await settle(scroll, window: window)
+        store.runs["delegated"]?.output = String(repeating: "New streamed response.\n", count: 35)
+        await assertBottom(scroll, window: window)
+
+        // The composer inset must not make a reader 120pt up count as near-bottom.
+        scroll.setContentOffset(CGPoint(x: 0, y: scroll.contentOffset.y - 120), animated: false)
+        await settle(scroll, window: window)
+        let nearBottomOffset = scroll.contentOffset.y
+        store.runs["delegated"]?.output += String(repeating: "More response.\n", count: 15)
+        await settle(scroll, window: window)
+        XCTAssertEqual(scroll.contentOffset.y, nearBottomOffset, accuracy: 3, "The composer inset incorrectly resumed following")
+    }
+
+    @MainActor func testShortConversationDoesNotOverscrollWhenSubmitting() async throws {
+        let store = AppStore(loadSavedState: false)
+        let session = AgentSession(id: "short", title: "Short conversation", preview: "", source: "Test", updatedAt: 1, messageCount: 0)
+        try await withChat(store: store, session: session) { scroll, window in
+            await self.assertBottom(scroll, window: window)
+            store.runs["request"] = AgentRun(id: "request", sessionID: session.id, text: "Hello", status: "submitting", output: "", created: 2)
+            await self.assertBottom(scroll, window: window)
+            store.runs["request"]?.status = "running"
+            store.runs["request"]?.output = "Hello back."
+            await self.assertBottom(scroll, window: window)
+            XCTAssertLessThan(scroll.contentSize.height, scroll.bounds.height - scroll.adjustedContentInset.top - scroll.adjustedContentInset.bottom)
+        }
+    }
+
+    @MainActor func testActivityStaysBetweenItsPromptAndTheNextQueuedPrompt() async throws {
+        let store = AppStore(loadSavedState: false)
+        let session = AgentSession(id: "activity", title: "Run ordering", preview: "", source: "Test", updatedAt: 1, messageCount: 0)
+        store.runs["first"] = AgentRun(id: "first", sessionID: session.id, text: "First request", status: "running", output: "", created: 2)
+        store.runs["second"] = AgentRun(id: "second", sessionID: session.id, text: "Queued request", status: "queued", output: "", created: 3)
+        store.activity[session.id] = [Activity(id: "tool", title: "Search", detail: "Working", finished: false, failed: false, runID: "first")]
+        try await withChat(store: store, session: session) { scroll, window in
+            await self.settle(scroll, window: window)
+            let image = self.snapshot(window)
+            let prompt = try self.textBounds(containing: "First request", in: image)
+            let activity = try self.textBounds(containing: "Agent activity", in: image)
+            let nextPrompt = try self.textBounds(containing: "Queued request", in: image)
+            XCTAssertGreaterThan(activity.minY, prompt.maxY)
+            XCTAssertLessThan(activity.maxY, nextPrompt.minY)
+            let attachment = XCTAttachment(image: image); attachment.name = "Activity follows its submitted prompt"; attachment.lifetime = .keepAlways; self.add(attachment)
+
+            store.runs.removeValue(forKey: "second")
+            store.runs["first"]?.status = "waiting_for_approval"
+            store.runs["first"]?.output = "Response after tool"
+            store.approvals["approval"] = PendingApproval(id: "approval", runID: "first", sessionID: session.id, description: "Approve this tool")
+            await self.settle(scroll, window: window)
+            let approvalImage = self.snapshot(window)
+            let approval = try self.textBounds(containing: "Approve this tool", in: approvalImage)
+            XCTAssertGreaterThan(approval.minY, try self.textBounds(containing: "Agent activity", in: approvalImage).maxY)
+            XCTAssertLessThan(approval.maxY, try self.textBounds(containing: "Response after tool", in: approvalImage).minY)
+        }
+    }
+
+    @MainActor func testBottomFollowsActivityApprovalsAndComposerSizeChanges() async throws {
+        let store = AppStore(loadSavedState: false)
+        let session = AgentSession(id: "layout", title: "Layout changes", preview: "", source: "Test", updatedAt: 1, messageCount: 20)
+        store.messages[session.id] = (0..<20).map {
+            ChatMessage(id: "m-\($0)", role: "user", content: String(repeating: "History line.\n", count: 1 + $0 % 7), createdAt: Double($0))
+        }
+        store.runs["request"] = AgentRun(id: "request", sessionID: session.id, text: "New request", status: "running", output: "", created: 21)
+        try await withChat(store: store, session: session) { scroll, window in
+            await self.assertBottom(scroll, window: window)
+            store.activity[session.id] = [Activity(id: "tool", title: "Search", detail: "Working", finished: false, failed: false, runID: "request")]
+            await self.assertBottom(scroll, window: window)
+            store.approvals["approval"] = PendingApproval(id: "approval", runID: "request", sessionID: session.id, description: String(repeating: "Approval details.\n", count: 5))
+            await self.assertBottom(scroll, window: window)
+            store.drafts[session.id] = String(repeating: "Draft line\n", count: 5)
+            await self.assertBottom(scroll, window: window)
+            let editor = try XCTUnwrap(self.textInputs(in: window).first { $0 is UITextView })
+            XCTAssertTrue(editor.becomeFirstResponder())
+            await self.assertBottom(scroll, window: window)
+            editor.resignFirstResponder()
+            await self.assertBottom(scroll, window: window)
+            store.drafts[session.id] = ""
+            store.approvals = [:]
+            store.runs["request"]?.output = String(repeating: "Streamed paragraph.\n\n", count: 35) + "Final visible line."
+            await self.assertBottom(scroll, window: window)
+            let image = self.snapshot(window)
+            let lastLine = try self.textBounds(containing: "Final visible line", in: image)
+            let visibleBottom = scroll.convert(CGPoint(x: 0, y: scroll.bounds.maxY - scroll.adjustedContentInset.bottom), to: window).y
+            XCTAssertGreaterThanOrEqual(visibleBottom - lastLine.maxY, 0)
+            XCTAssertLessThan(visibleBottom - lastLine.maxY, 40, "Blank space follows the last rendered response")
+            let attachment = XCTAttachment(image: image); attachment.name = "Last response above composer without overscroll"; attachment.lifetime = .keepAlways; self.add(attachment)
+            store.activity = [:]
+            store.runs["request"]?.status = "completed"
+            await self.assertBottom(scroll, window: window)
+        }
+    }
+
+    @MainActor private func snapshot(_ window: UIWindow) -> UIImage {
+        UIGraphicsImageRenderer(bounds: window.bounds).image { _ in window.drawHierarchy(in: window.bounds, afterScreenUpdates: true) }
+    }
+
+    private func textBounds(containing text: String, in image: UIImage, file: StaticString = #filePath, line: UInt = #line) throws -> CGRect {
+        let request = VNRecognizeTextRequest()
+        request.recognitionLevel = .accurate
+        try VNImageRequestHandler(cgImage: XCTUnwrap(image.cgImage), options: [:]).perform([request])
+        let observation = try XCTUnwrap(request.results?.first {
+            $0.topCandidates(1).first?.string.localizedCaseInsensitiveContains(text) == true
+        }, "Missing rendered text: \(text)", file: file, line: line)
+        let rect = observation.boundingBox
+        return CGRect(x: rect.minX * image.size.width, y: (1 - rect.maxY) * image.size.height,
+                      width: rect.width * image.size.width, height: rect.height * image.size.height)
+    }
+
+    @MainActor private func withChat(store: AppStore, session: AgentSession,
+                                     check: (UIScrollView, UIWindow) async throws -> Void) async throws {
+        store.sessions = [session]
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.first as? UIWindowScene)
+        let previous = scene.windows.first { $0.isKeyWindow }
+        let window = UIWindow(windowScene: scene)
+        window.rootViewController = UIHostingController(rootView: NavigationStack { ChatView(store: store, session: session) }.preferredColorScheme(.dark))
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true; window.rootViewController = nil; previous?.makeKeyAndVisible() }
+        try await Task.sleep(for: .milliseconds(400))
+        let scroll = try XCTUnwrap(scrollViews(in: window).max { $0.contentSize.height < $1.contentSize.height })
+        try await check(scroll, window)
     }
 
     @MainActor private func settle(_ scroll: UIScrollView, window: UIWindow) async {

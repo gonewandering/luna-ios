@@ -6,7 +6,10 @@ struct ChatView: View {
     @State private var sending = false
     @State private var showingModels = false
     @State private var showingTasks = false
-    @State private var atBottom = true
+    @State private var followingLatest = true
+    @State private var userScrolling = false
+    @State private var bottomScrollRequest = 0
+    @State private var scrollPosition = ScrollPosition(edge: .bottom)
     @FocusState private var composerFocused: Bool
     private var sessionRuns: [AgentRun] {
         Self.visibleRuns(sessionID: session.id, runs: store.runs.values)
@@ -20,89 +23,72 @@ struct ChatView: View {
     }
     private var draft: Binding<String> { Binding(get: { store.drafts[session.id] ?? "" }, set: { store.drafts[session.id] = $0 }) }
     var body: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 26) {
-                    HStack(spacing: 7) {
-                        Rectangle().fill(Palette.line).frame(height: 1)
-                        Text(store.demo ? "DEMO CONVERSATION" : "AGENT SESSION")
-                            .font(.system(size: 9, weight: .semibold)).tracking(1.5).fixedSize()
-                        Rectangle().fill(Palette.line).frame(height: 1)
-                    }.foregroundStyle(Palette.muted).padding(.top, 10)
-                    if store.historyHasMore[session.id] == true {
-                        Button("Load earlier messages") { Task { await store.loadMessages(session.id, older: true) } }
-                            .font(.caption).frame(maxWidth: .infinity)
-                    }
-                    ForEach(store.messages[session.id] ?? []) { message in
-                        MessageView(message: message, agentName: store.agentName).id(message.id)
-                    }
-                    if let activities = store.activity[session.id], !activities.isEmpty {
-                        if activities.contains(where: { !$0.finished }) {
-                            ToolActivityView(activities: activities)
-                        } else if store.notices.contains(TransientNotices.activity(session.id)) {
-                            NoticeCard(dismissLabel: "Dismiss finished activity", dismiss: { store.notices.dismiss(TransientNotices.activity(session.id)) }) {
-                                ToolActivityView(activities: activities)
-                            }
-                        }
-                    }
-                    ForEach(sessionRuns) { run in
-                        RunCard(store: store, run: run)
-                    }
-                    ForEach(store.approvals.values.filter { $0.sessionID == session.id }.sorted { $0.id < $1.id }) { approval in
-                        VStack(alignment: .leading, spacing: 12) {
-                            Label("Hermes needs your approval", systemImage: "hand.raised").font(.headline)
-                            Text(approval.description).font(.system(.callout, design: .monospaced)).textSelection(.enabled)
-                            HStack {
-                                Button("Deny") { Task { await store.resolve(approval, choice: "deny") } }.buttonStyle(.bordered)
-                                Button("Allow once") { Task { await store.resolve(approval, choice: "once") } }.buttonStyle(.borderedProminent)
-                                    .foregroundStyle(Palette.onAccent)
-                            }
-                        }.padding(16).background(Palette.userBubble, in: RoundedRectangle(cornerRadius: 16))
-                    }
-                    if (store.messages[session.id] ?? []).isEmpty && sessionRuns.isEmpty {
-                        VStack(alignment: .leading, spacing: 12) {
-                            LunaMark(size: 56)
-                            Text("What’s on your mind?").font(.system(size: 30, design: .serif))
-                            Text("Write a prompt or start a voice conversation. Your agent’s work will appear here.")
-                                .foregroundStyle(Palette.muted).font(.body)
-                        }.padding(.vertical, 48)
-                    }
-                    Color.clear.frame(height: 19).id("bottom")
-                }.padding(.horizontal, 22)
-            }
-            .defaultScrollAnchor(.bottom)
-            .defaultScrollAnchor(.top, for: .alignment)
-            .scrollDismissesKeyboard(.interactively)
-            .background(Palette.canvas)
-            .onScrollGeometryChange(for: Bool.self) { geometry in
-                // Near-bottom within ~80pt counts as "following the latest".
-                geometry.contentOffset.y + geometry.containerSize.height >= geometry.contentSize.height - 80
-            } action: { _, nearBottom in
-                atBottom = nearBottom
-            }
-            .onChange(of: store.messages[session.id]?.last, initial: true) { _, _ in
-                // New or reconciled history: follow only when the user is at the
-                // bottom (atBottom starts true, so initial presentation still pins).
-                if atBottom { proxy.scrollTo("bottom", anchor: .bottom) }
-            }
-            .onChange(of: sessionRuns.map(\.id)) { old, new in
-                // A newly appearing run in this session means the user just
-                // submitted a prompt here: always bring it into view and resume
-                // following its response, even if they had scrolled up.
-                if !Set(new).subtracting(old).isEmpty {
-                    atBottom = true
-                    proxy.scrollTo("bottom", anchor: .bottom)
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 26) {
+                HStack(spacing: 7) {
+                    Rectangle().fill(Palette.line).frame(height: 1)
+                    Text(store.demo ? "DEMO CONVERSATION" : "AGENT SESSION")
+                        .font(.system(size: 9, weight: .semibold)).tracking(1.5).fixedSize()
+                    Rectangle().fill(Palette.line).frame(height: 1)
+                }.foregroundStyle(Palette.muted).padding(.top, 10)
+                if store.historyHasMore[session.id] == true {
+                    Button("Load earlier messages") { Task { await store.loadMessages(session.id, older: true) } }
+                        .font(.caption).frame(maxWidth: .infinity)
                 }
-            }
-            .onChange(of: sessionRuns.map { [$0.text, $0.output] }) { _, _ in
-                // Streaming content growth follows the latest only while at bottom.
-                if atBottom { proxy.scrollTo("bottom", anchor: .bottom) }
-            }
-            .onChange(of: store.approvals.values.filter { $0.sessionID == session.id }.map(\.id).sorted()) { _, _ in
-                if atBottom { proxy.scrollTo("bottom", anchor: .bottom) }
-            }
-            .safeAreaInset(edge: .bottom, spacing: 0) { composer }
+                ForEach(store.messages[session.id] ?? []) { message in
+                    MessageView(message: message, agentName: store.agentName).id(message.id)
+                }
+                ForEach(sessionRuns) { run in
+                    RunCard(store: store, run: run)
+                }
+                if (store.messages[session.id] ?? []).isEmpty && sessionRuns.isEmpty {
+                    VStack(alignment: .leading, spacing: 12) {
+                        LunaMark(size: 56)
+                        Text("What’s on your mind?").font(.system(size: 30, design: .serif))
+                        Text("Write a prompt or start a voice conversation. Your agent’s work will appear here.")
+                            .foregroundStyle(Palette.muted).font(.body)
+                    }.padding(.vertical, 48)
+                }
+            }.padding(.horizontal, 22).padding(.bottom, 19)
         }
+        .scrollPosition($scrollPosition)
+        .defaultScrollAnchor(.bottom, for: .initialOffset)
+        // Let SwiftUI preserve the content edge through lazy measurement and
+        // keyboard resizing; switching to top anchoring preserves a reader's offset.
+        .defaultScrollAnchor(followingLatest && !userScrolling ? .bottom : .top, for: .sizeChanges)
+        .defaultScrollAnchor(.top, for: .alignment)
+        .scrollDismissesKeyboard(.interactively)
+        .background(Palette.canvas)
+        .onScrollPhaseChange { _, phase, context in
+            userScrolling = phase == .tracking || phase == .interacting || phase == .decelerating
+            if userScrolling || phase == .idle {
+                followingLatest = Self.isNearBottom(context.geometry)
+            }
+        }
+        .onScrollGeometryChange(for: ScrollGeometry.self) { $0 } action: { old, new in
+            let layoutChanged = old.contentSize != new.contentSize || old.containerSize != new.containerSize
+                || old.contentInsets != new.contentInsets
+            if userScrolling {
+                followingLatest = Self.isNearBottom(new)
+            } else if layoutChanged {
+                // Rich text can finish measuring after the native resize adjustment.
+                // Re-resolve the edge without treating that growth as a user scroll.
+                if followingLatest, new.containerSize.height > 0 { bottomScrollRequest += 1 }
+            } else if old.contentOffset != new.contentOffset {
+                followingLatest = Self.isNearBottom(new)
+            }
+        }
+        .onChange(of: followingLatest && !userScrolling) { _, follow in
+            if follow { bottomScrollRequest += 1 }
+        }
+        .task(id: bottomScrollRequest) {
+            guard bottomScrollRequest > 0 else { return }
+            // Let lazy rows finish their current layout before resolving the edge.
+            await Task.yield()
+            guard !Task.isCancelled, followingLatest, !userScrolling else { return }
+            scrollPosition.scrollTo(edge: .bottom)
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) { composer }
         .navigationTitle(session.title).navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(Palette.canvas, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
@@ -133,6 +119,11 @@ struct ChatView: View {
         }
         .sheet(isPresented: $showingModels) { SessionModelPicker(store: store, sessionID: session.id) }
         .sheet(isPresented: $showingTasks) { TaskHistoryView(store: store, sessionID: session.id) }
+    }
+
+    private static func isNearBottom(_ geometry: ScrollGeometry) -> Bool {
+        // visibleRect includes the bottom inset occupied by the composer/keyboard.
+        geometry.visibleRect.maxY - geometry.contentInsets.bottom >= geometry.contentSize.height - 80
     }
 
     private var composer: some View {
@@ -171,6 +162,10 @@ struct ChatView: View {
                     voiceIsActive: false, focus: $composerFocused,
                     onMicrophone: { Task { await store.startVoice(session.id) } },
                     onSend: {
+                        // Only a send from this composer explicitly resumes following.
+                        // Runs arriving through Luna voice/API preserve a reader's place.
+                        followingLatest = true
+                        bottomScrollRequest += 1
                         sending = true
                         Task { await store.send(session.id); sending = false }
                     })
@@ -206,6 +201,27 @@ private struct RunCard: View {
                         modelDecision
                     }.padding(.vertical, 8)
                 }
+            }
+            let activities = (store.activity[run.sessionID] ?? []).filter { $0.runID == run.id }
+            if !activities.isEmpty {
+                if activities.contains(where: { !$0.finished }) {
+                    ToolActivityView(activities: activities)
+                } else if store.notices.contains(TransientNotices.activity(run.sessionID)) {
+                    NoticeCard(dismissLabel: "Dismiss finished activity", dismiss: { store.notices.dismiss(TransientNotices.activity(run.sessionID)) }) {
+                        ToolActivityView(activities: activities)
+                    }
+                }
+            }
+            ForEach(store.approvals.values.filter { $0.sessionID == run.sessionID && $0.runID == run.id }.sorted { $0.id < $1.id }) { approval in
+                VStack(alignment: .leading, spacing: 12) {
+                    Label("Hermes needs your approval", systemImage: "hand.raised").font(.headline)
+                    Text(approval.description).font(.system(.callout, design: .monospaced)).textSelection(.enabled)
+                    HStack {
+                        Button("Deny") { Task { await store.resolve(approval, choice: "deny") } }.buttonStyle(.bordered)
+                        Button("Allow once") { Task { await store.resolve(approval, choice: "once") } }.buttonStyle(.borderedProminent)
+                            .foregroundStyle(Palette.onAccent)
+                    }
+                }.padding(16).background(Palette.userBubble, in: RoundedRectangle(cornerRadius: 16))
             }
             if !run.output.isEmpty {
                 MessageView(message: ChatMessage(id: run.id + "-assistant", role: "assistant", content: run.output, createdAt: run.created), agentName: store.agentName)
