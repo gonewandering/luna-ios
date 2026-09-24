@@ -100,7 +100,7 @@
 		C60F18A533C89C20F2AA5120 /* LunaLiveTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = LunaLiveTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		CAD6FE67F1EEF86E27824070 /* LunaTextRouterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LunaTextRouterTests.swift; sourceTree = "<group>"; };
 		CB0008ECFC7D0FA5A4299AA9 /* LunaComposer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LunaComposer.swift; sourceTree = "<group>"; };
-		D399E4DA6B951325F78CD25C /* Luna.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Luna.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		D399E4DA6B951325F78CD25C /* Luna.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Luna.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		D3A7EBAEB8A9F84547ED0E2C /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
 		DF7A644E6F06D5D82786CBCC /* LunaVoiceTools.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LunaVoiceTools.swift; sourceTree = "<group>"; };
 		DFDC69E0DD3B2E98DCD51B29 /* LunaStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LunaStore.swift; sourceTree = "<group>"; };
@@ -320,8 +320,6 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1430;
-				TargetAttributes = {
-				};
 			};
 			buildConfigurationList = 9C7285D4C14B8A8DF926CBB7 /* Build configuration list for PBXProject "Luna" */;
 			developmentRegion = en;
@@ -565,6 +563,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = ZBG2L2QMYG;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Luna/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -649,6 +648,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = ZBG2L2QMYG;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Luna/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
