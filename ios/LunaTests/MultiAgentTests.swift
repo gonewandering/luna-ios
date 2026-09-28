@@ -359,13 +359,13 @@ final class MultiAgentTests: XCTestCase {
     }
 }
 
-@MainActor private final class TestVault {
+@MainActor final class TestVault {
     var values: [String: String] = [:]
     func read(_ id: String) -> String { values[id] ?? "" }
     func write(_ key: String, _ id: String) { if key.isEmpty { values.removeValue(forKey: id) } else { values[id] = key } }
 }
 
-@MainActor private final class RecordingAgent: AgentBackend {
+@MainActor final class RecordingAgent: AgentBackend {
     let isDemo = false
     let label: String
     let baseTime: Double

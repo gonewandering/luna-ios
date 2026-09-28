@@ -16,6 +16,9 @@ struct HomeSession: Identifiable {
     private(set) var profiles: [AgentProfile] = []
     private(set) var runtimes: [String: AppStore] = [:]
     var memory: LocalMemory
+    /// Durable, chronological transcript of every conversation leg. Falls back to
+    /// an in-memory store if the database cannot be opened, so chat still works.
+    let transcripts: TranscriptStore
     let voice = VoiceController()
     let lunaText = LunaTextConversation()
     let notices = TransientNotices()
@@ -48,6 +51,11 @@ struct HomeSession: Identifiable {
         self.root = root; self.backendFactory = backendFactory; self.readKey = readKey; self.writeKey = writeKey
         do { memory = try LocalMemory(file: loadSavedState ? root.appending(path: "memory.json") : nil) }
         catch { memory = try! LocalMemory(); storageError = "Luna could not read its local memory. Your saved file has been left intact." }
+        do { transcripts = try TranscriptStore(file: root.appending(path: "transcript.sqlite")) }
+        catch {
+            transcripts = try! TranscriptStore(file: nil)
+            storageError = storageError ?? "Luna could not open its conversation transcript. Existing files have been left intact."
+        }
         if loadSavedState {
             openAIKey = readKey("openai-api-key")
             do {
@@ -70,6 +78,7 @@ struct HomeSession: Identifiable {
                 }
                 for profile in profiles { try attach(profile, key: readKey(profile.keyAccount)) }
                 memory.retainAgents(Set(profiles.map(\.id)))
+                try transcripts.retainAgents(Set(profiles.map(\.id)))
             } catch { storageError = "Luna could not load its saved agents. Existing files have been left intact." }
         } else {
             // Tests and previews can still exercise durable local files in an isolated directory.
@@ -228,6 +237,7 @@ struct HomeSession: Identifiable {
             runtimes.removeValue(forKey: previous.id)
             if previous.id != profile.id {
                 try? memory.removeAgent(previous.id)
+                try? transcripts.removeAgent(previous.id)
                 try? removeLegacyCopy(previous)
                 try? writeKey("", previous.keyAccount)
                 try? FileManager.default.removeItem(at: AgentFiles.directory(previous.id, root: root))
@@ -250,6 +260,7 @@ struct HomeSession: Identifiable {
         profiles = next; runtimes.removeValue(forKey: id); navigation = []
         if voiceTarget?.agentID == id { setVoiceTarget(nil) }
         try memory.removeAgent(id)
+        try transcripts.removeAgent(id)
         try removeLegacyCopy(profile)
         try writeKey("", profile.keyAccount)
         try ChatPhoto.removeFiles(scope: "profile:" + profile.id)
@@ -277,6 +288,15 @@ struct HomeSession: Identifiable {
         }
         runtimes[profile.id] = runtime
         syncMemory(profile.id)
+        migrateTranscript(profile)
+    }
+    /// Import the legacy cache and memory snapshot into the transcript exactly once
+    /// per agent. Failure leaves the legacy files intact and is retried next launch.
+    private func migrateTranscript(_ profile: AgentProfile) {
+        let cache = CacheFile.read(AgentFiles.cache(profile.id, root: root))
+        let remembered = memory.sessions.values.filter { $0.address.agentID == profile.id }
+        do { try TranscriptMigration.run(profile: profile, cache: cache, memory: Array(remembered), into: transcripts) }
+        catch { if self.error == nil { self.error = "Luna couldn't import " + profile.name + "'s earlier conversations into its transcript." } }
     }
     private func removeLegacyCopy(_ profile: AgentProfile) throws {
         let legacyAccount = Credentials.hermesAccount(profile.address)
@@ -517,6 +537,7 @@ struct HomeSession: Identifiable {
             for runtime in runtimes.values { group.addTask { await runtime.sceneChanged(background: background) } }
         }
         try? memory.save()
+        if background { try? transcripts.flush() }
     }
     func startDemo() async {
         demo = true; started = true

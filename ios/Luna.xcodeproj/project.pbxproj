@@ -44,6 +44,7 @@
 		B344D5703307877B5D17009F /* WebRTC in Frameworks */ = {isa = PBXBuildFile; productRef = 326B425362EA8C9CF322D356 /* WebRTC */; };
 		B670671C4B2202D5731E8618 /* LocalMemory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 576E817E7F2EF6EBD3E0896C /* LocalMemory.swift */; };
 		BB29AF299B28CDCC199D1D78 /* AgentProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5236D692D2EABE6416E275AA /* AgentProfile.swift */; };
+		BE228A7A4E87EC49C5D7467A /* Transcript.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54D2E5407D725E944A5D8983 /* Transcript.swift */; };
 		C9679524C5D01422C4D71C20 /* RunCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = E81F3F231CEEBA56E46D061F /* RunCoordinator.swift */; };
 		D0E4B53C191D3F2078DCB4D8 /* TransientNotices.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5AFDF72DEE4AD51379C4317 /* TransientNotices.swift */; };
 		D2B8E3D89720D284733EF140 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA21F9D657ACA2D410DE710F /* Theme.swift */; };
@@ -54,6 +55,7 @@
 		F40EC69174E6D5E09403DF6B /* AutoModelRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3AA6044B370434508DB9A721 /* AutoModelRouter.swift */; };
 		F50262065CEB9B516AC6C133 /* ReceivedAttachment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4EA22364603F42C736FC41B3 /* ReceivedAttachment.swift */; };
 		FB1B524A7D126D8634BD2B1E /* MessageComposer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 302DF9BB207518423723E66D /* MessageComposer.swift */; };
+		FD69ADCF156F971F46D2EEF3 /* TranscriptStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB729E04C69366A09137F1C9 /* TranscriptStoreTests.swift */; };
 		FF8C1079AA50B6511BC84EF8 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 090F46C385278EFF03C80323 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
@@ -91,6 +93,7 @@
 		48182F45BCE1C3A1B0919F6F /* LunaTextRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LunaTextRouter.swift; sourceTree = "<group>"; };
 		4EA22364603F42C736FC41B3 /* ReceivedAttachment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReceivedAttachment.swift; sourceTree = "<group>"; };
 		5236D692D2EABE6416E275AA /* AgentProfile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentProfile.swift; sourceTree = "<group>"; };
+		54D2E5407D725E944A5D8983 /* Transcript.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Transcript.swift; sourceTree = "<group>"; };
 		576E817E7F2EF6EBD3E0896C /* LocalMemory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalMemory.swift; sourceTree = "<group>"; };
 		5B8A80D16591DCF4C398C87D /* CodingProgressReporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodingProgressReporter.swift; sourceTree = "<group>"; };
 		5C8ADDF94DDDFF9CE88126F0 /* SessionModelPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionModelPicker.swift; sourceTree = "<group>"; };
@@ -115,6 +118,7 @@
 		C60F18A533C89C20F2AA5120 /* LunaLiveTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = LunaLiveTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		CAD6FE67F1EEF86E27824070 /* LunaTextRouterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LunaTextRouterTests.swift; sourceTree = "<group>"; };
 		CB0008ECFC7D0FA5A4299AA9 /* LunaComposer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LunaComposer.swift; sourceTree = "<group>"; };
+		CB729E04C69366A09137F1C9 /* TranscriptStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptStoreTests.swift; sourceTree = "<group>"; };
 		D399E4DA6B951325F78CD25C /* Luna.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Luna.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		D3A7EBAEB8A9F84547ED0E2C /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
 		D9C1C28D18A18F2EF864AD56 /* ReceivedAttachmentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReceivedAttachmentView.swift; sourceTree = "<group>"; };
@@ -184,6 +188,7 @@
 				3F769306A7E4F688823015D8 /* Persistence.swift */,
 				4EA22364603F42C736FC41B3 /* ReceivedAttachment.swift */,
 				E81F3F231CEEBA56E46D061F /* RunCoordinator.swift */,
+				54D2E5407D725E944A5D8983 /* Transcript.swift */,
 				C5AFDF72DEE4AD51379C4317 /* TransientNotices.swift */,
 			);
 			path = Core;
@@ -198,6 +203,7 @@
 				BDF59CED60218ECEC6977138 /* LunaTests.swift */,
 				CAD6FE67F1EEF86E27824070 /* LunaTextRouterTests.swift */,
 				F43D3DE575F4C271CC601EDF /* MultiAgentTests.swift */,
+				CB729E04C69366A09137F1C9 /* TranscriptStoreTests.swift */,
 			);
 			path = LunaTests;
 			sourceTree = "<group>";
@@ -398,6 +404,7 @@
 				0BA4C4EF3498F60D61A34FE0 /* LunaTests.swift in Sources */,
 				5C14E830CC489AE7C2A9AEEF /* LunaTextRouterTests.swift in Sources */,
 				741130FDCBC245770ED2136D /* MultiAgentTests.swift in Sources */,
+				FD69ADCF156F971F46D2EEF3 /* TranscriptStoreTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -438,6 +445,7 @@
 				8F64EB25775D2239FB3A01BB /* SessionModelPicker.swift in Sources */,
 				EB8D5DA8E42E32A82037A7BD /* TaskHistoryView.swift in Sources */,
 				D2B8E3D89720D284733EF140 /* Theme.swift in Sources */,
+				BE228A7A4E87EC49C5D7467A /* Transcript.swift in Sources */,
 				D0E4B53C191D3F2078DCB4D8 /* TransientNotices.swift in Sources */,
 				42735011253E9E58A0FF72A1 /* VoiceAudioSession.swift in Sources */,
 				AA5D77885524AD875C0254FA /* VoiceController.swift in Sources */,
