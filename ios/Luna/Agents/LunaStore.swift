@@ -121,6 +121,7 @@ struct HomeSession: Identifiable {
         lunaText.draft = ""; lunaText.sending = true; lunaText.replyHidden = false
         lunaText.messages.append(ChatMessage(id: turnID, role: "user", content: prompt, createdAt: Date().timeIntervalSince1970))
         lunaText.messages = Array(lunaText.messages.suffix(24))
+        recordUserTurn(turnID, text: prompt, source: .typed, address: lunaText.destination.flatMap { session($0) != nil ? $0 : nil })
         var context: JSONObject = ["current_time": .number(Date().timeIntervalSince1970), "time_zone": .string(TimeZone.current.identifier),
                                   "browsing_agent_id": agentID.map(JSONValue.string) ?? .null]
         if let target = lunaText.destination, session(target) != nil {
@@ -134,7 +135,7 @@ struct HomeSession: Identifiable {
                 let reply = try await router.reply(prompt: prompt, history: history, context: context, turnID: turnID) { [weak self] name, args, id in
                     guard let self else { throw CancellationError() }
                     try Task.checkCancellation()
-                    let result = try await executeVoice(name, arguments: args, id: id)
+                    let result = try await executeVoice(name, arguments: args, id: id, turnID: turnID)
                     if ["select_session", "create_session", "send_prompt"].contains(name),
                        let agent = result["agent_id"]?.string, let session = result["session_id"]?.string {
                         lunaText.destination = SessionAddress(agentID: agent, sessionID: session)
@@ -143,6 +144,7 @@ struct HomeSession: Identifiable {
                 }
                 lunaText.messages.append(ChatMessage(id: turnID + "-reply", role: "assistant", content: reply, createdAt: Date().timeIntervalSince1970))
                 lunaText.messages = Array(lunaText.messages.suffix(24))
+                recordLunaReply(turnID, text: reply)
             } catch is CancellationError {
                 error = "Luna stopped. Any task already sent is still available in its conversation."
             } catch { self.error = error.localizedDescription }
@@ -278,6 +280,9 @@ struct HomeSession: Identifiable {
         do { try runtime.configure(profile: profile, key: key, openAIKey: openAIKey, voice: voice, cache: AgentFiles.cache(profile.id, root: root)) }
         catch { runtime.error = "Luna could not load this agent’s saved model preferences. Existing files have been left intact." }
         if let backendFactory { runtime.makeBackend = { try backendFactory(profile, key) } }
+        runtime.recorder = TranscriptRecorder(store: transcripts, agentID: profile.id) { [weak self] in
+            self?.profiles.first { $0.id == profile.id }?.name ?? profile.name
+        }
         runtime.onVoiceRequest = { [weak self] sid in await self?.startVoice(target: SessionAddress(agentID: profile.id, sessionID: sid)) }
         runtime.onLocalStateChanged = { [weak self] in self?.syncMemory(profile.id) }
         runtime.onRunFinished = { [weak self] run in
@@ -342,6 +347,7 @@ struct HomeSession: Identifiable {
         }
         guard !openAIKey.isEmpty else { error = "Add Luna’s OpenAI API key in Settings to use voice."; return }
         setVoiceTarget(target); transcript = ""
+        voice.onTurn = { [weak self] turn in self?.recordSpokenTurn(turn) }
         var context: JSONObject = ["current_time": .number(Date().timeIntervalSince1970), "time_zone": .string(TimeZone.current.identifier)]
         if let target { context["agent_id"] = .string(target.agentID); context["session_id"] = .string(target.sessionID) }
         do {
@@ -349,7 +355,7 @@ struct HomeSession: Identifiable {
                 initialContext: context,
                 execute: { [weak self] name, args, id in
                     guard let self else { throw CancellationError() }
-                    return try await executeVoice(name, arguments: args, id: id)
+                    return try await executeVoice(name, arguments: args, id: id, turnID: voice.currentTurnID)
                 }, transcript: { [weak self] role, delta in
                     guard role == "user" else { return }
                     self?.transcript = String(((self?.transcript ?? "") + delta).suffix(600))
@@ -359,7 +365,21 @@ struct HomeSession: Identifiable {
         catch { self.error = error.localizedDescription }
     }
 
-    func executeVoice(_ name: String, arguments args: JSONObject, id: String) async throws -> JSONObject {
+    func executeVoice(_ name: String, arguments args: JSONObject, id: String, turnID: String? = nil) async throws -> JSONObject {
+        let turn = turnID ?? Self.turnID(forRequest: id)
+        do {
+            let result = try await perform(name, arguments: args, id: id, turnID: turn)
+            recordLunaTool(turn, name: name, requestID: id, arguments: args, result: result, failed: false)
+            return result
+        } catch {
+            recordLunaTool(turn, name: name, requestID: id, arguments: args, result: ["error": .string(error.localizedDescription)], failed: true)
+            throw error
+        }
+    }
+    /// Voice turns have no explicit turn ID; requests share one per response.
+    static func turnID(forRequest id: String) -> String { "req-" + id }
+
+    private func perform(_ name: String, arguments args: JSONObject, id: String, turnID: String) async throws -> JSONObject {
         switch name {
         case "pause_microphone":
             voice.setMicrophoneMuted(true)
@@ -399,12 +419,14 @@ struct HomeSession: Identifiable {
         case "select_session":
             let (address, _) = try target(args)
             setVoiceTarget(address); open(address)
+            try? transcripts.attach(turn: turnID, to: address)
             return ["agent_id": .string(address.agentID), "session_id": .string(address.sessionID), "status": .string("selected"),
                     "note": .string("Voice remains connected. Continue using these explicit IDs for requests.")]
         case "create_session":
             guard let agent = args["agent_id"]?.string else { throw ServiceError(message: "Choose an exact agent ID first.") }
             let address = try await createSession(agentID: agent, title: args["title"]?.string ?? "New session")
             setVoiceTarget(address); open(address)
+            try? transcripts.attach(turn: turnID, to: address)
             return ["agent_id": .string(agent), "session_id": .string(address.sessionID), "status": .string("created")]
         case "refresh_session":
             let (address, runtime) = try target(args)
@@ -420,7 +442,7 @@ struct HomeSession: Identifiable {
                     throw ServiceError(message: "That voice request already belongs to a different destination.", statusCode: 409)
                 }
             }
-            var result = try await runtime.executeVoice(name, arguments: args, id: id, boundSession: address.sessionID)
+            var result = try await runtime.executeVoice(name, arguments: args, id: id, boundSession: address.sessionID, turnID: turnID)
             if name == "stop_agent", runtime.profile?.kind == .openAICompatible {
                 result["note"] = .string("The local reply stream was stopped. This connector cannot confirm cancellation of work on the remote agent.")
             }
@@ -446,7 +468,7 @@ struct HomeSession: Identifiable {
                 throw ServiceError(message: "Choose claude, grok, or codex, or leave it unset so Luna uses an available one.")
             }
             let started = try await runtime.startCodingTask(id: id, prompt: args["prompt"]?.string ?? "",
-                                                            backend: CodingAgentBackend.named(requested))
+                                                            backend: CodingAgentBackend.named(requested), turnID: turnID)
             let address = SessionAddress(agentID: agent, sessionID: started.sessionID)
             setVoiceTarget(address); open(address); runtime.saveNow(); syncMemory(agent)
             beginCodingProgress(requestID: started.run.id, agentID: agent, backend: started.choice.backend)
@@ -466,6 +488,61 @@ struct HomeSession: Identifiable {
         default: throw ServiceError(message: "Unknown Luna voice command.")
         }
     }
+    // MARK: Transcript capture
+
+    /// Spoken turns stream in as fragments; the row is staged while open and
+    /// committed when the segmenter closes it. User turns live under the voice
+    /// target (if any) until Luna routes them; Luna's speech follows the turn.
+    func recordSpokenTurn(_ turn: VoiceTurnSegmenter.Turn) {
+        guard !turn.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        let now = Date().timeIntervalSince1970
+        if turn.role == "user" {
+            var entry = (try? transcripts.entry(turn.id)) ?? TranscriptEntry(id: turn.id, turnID: turn.id, address: voiceTarget.flatMap { session($0) != nil ? $0 : nil },
+                kind: .userToLuna, source: .spoken, text: "", agentName: voiceTarget.flatMap { id in profiles.first { $0.id == id.agentID }?.name }, createdAt: now)
+            entry.text = turn.text; entry.status = turn.closed ? .final : .streaming
+            if turn.closed { try? transcripts.upsert(entry) } else { transcripts.stage(entry) }
+        } else {
+            // Luna's reply belongs to the most recent spoken user turn.
+            let userTurn = voice.currentTurnID ?? turn.id
+            let rows = (try? transcripts.entries(turn: userTurn)) ?? []
+            let address = rows.compactMap(\.address).last
+            let summarized = rows.filter { $0.kind == .agentFinal }.map(\.id)
+            var entry = (try? transcripts.entry(turn.id)) ?? TranscriptEntry(id: turn.id, turnID: userTurn, address: address, kind: .lunaToUser,
+                source: .spoken, text: "", summarizes: summarized.isEmpty ? nil : summarized, createdAt: now)
+            entry.text = turn.text; entry.status = turn.closed ? .final : .streaming
+            if entry.address == nil { entry.address = address }
+            if turn.closed { try? transcripts.upsert(entry) } else { transcripts.stage(entry) }
+        }
+    }
+
+    func recordUserTurn(_ turnID: String, text: String, source: TranscriptEntry.Source, address: SessionAddress?) {
+        let entry = TranscriptEntry(id: turnID, turnID: turnID, address: address, kind: .userToLuna, source: source, text: text,
+                                    agentName: address.flatMap { id in profiles.first { $0.id == id.agentID }?.name }, createdAt: Date().timeIntervalSince1970)
+        try? transcripts.upsert(entry)
+    }
+    func recordLunaReply(_ turnID: String, text: String, summarizes: [String]? = nil, address: SessionAddress? = nil) {
+        let turn = (try? transcripts.entries(turn: turnID)) ?? []
+        let destination = address ?? turn.compactMap(\.address).last
+        let entry = TranscriptEntry(id: turnID + "-reply-" + String(turn.count), turnID: turnID, address: destination, kind: .lunaToUser, text: text,
+                                    summarizes: summarizes, createdAt: Date().timeIntervalSince1970)
+        try? transcripts.upsert(entry)
+    }
+    /// Luna's own tool use is recorded as `lunaTool`; routing calls that admit
+    /// work are represented by the run's prompt row instead.
+    private func recordLunaTool(_ turnID: String, name: String, requestID: String, arguments: JSONObject, result: JSONObject, failed: Bool) {
+        guard !["send_prompt", "start_coding_task"].contains(name) || failed else { return }
+        let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
+        func text(_ object: JSONObject) -> String { String(decoding: (try? encoder.encode(object)) ?? Data(), as: UTF8.self) }
+        let turn = (try? transcripts.entries(turn: turnID)) ?? []
+        let address = turn.compactMap(\.address).last ?? (arguments["agent_id"]?.string).flatMap { agent in
+            arguments["session_id"]?.string.map { SessionAddress(agentID: agent, sessionID: $0) }
+        }
+        let entry = TranscriptEntry(id: "luna-tool-" + requestID, turnID: turnID, address: address, kind: .lunaTool, text: "",
+                                    tool: .init(name: name, arguments: text(arguments), result: String(text(result).prefix(20_000)), status: failed ? "failed" : "completed"),
+                                    status: failed ? .failed : .final, createdAt: Date().timeIntervalSince1970)
+        try? transcripts.upsert(entry)
+    }
+
     struct CodingRunTag: Equatable, Sendable {
         let agentID: String
         let backend: CodingAgentBackend
@@ -489,6 +566,13 @@ struct HomeSession: Identifiable {
                                              content: update.message, createdAt: Date().timeIntervalSince1970))
         lunaText.messages = Array(lunaText.messages.suffix(24))
         lunaText.replyHidden = false
+        if let tag = codingRuns[id], let run = runtimes[tag.agentID]?.runs[id] {
+            let entry = TranscriptEntry(id: "coding-progress-\(id)-\(update.sequence)", turnID: run.turnID ?? "run-" + id,
+                                        address: SessionAddress(agentID: tag.agentID, sessionID: run.sessionID), kind: .lunaToUser,
+                                        text: update.message, runID: id, summarizes: update.isFinal ? [TranscriptRecorder.outputID(id)] : nil,
+                                        createdAt: Date().timeIntervalSince1970)
+            try? transcripts.upsert(entry)
+        }
         notices.show(TransientNotices.codingProgress(id), duration: 12)
         Task { [weak self] in await self?.voice.progress(update) }
         if update.isFinal { endCodingProgress(id) }

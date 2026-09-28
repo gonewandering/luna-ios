@@ -46,6 +46,8 @@ import Observation
     @ObservationIgnored var onRunFinished: ((AgentRun) async -> Void)?
     @ObservationIgnored var onLocalStateChanged: (() -> Void)?
     @ObservationIgnored var makeBackend: (() throws -> any AgentBackend)?
+    /// Set by LunaStore; records every run, tool event and history page.
+    @ObservationIgnored var recorder: TranscriptRecorder?
     @ObservationIgnored private var managedCacheURL: URL?
     @ObservationIgnored private var hydrationTask: Task<Void, Never>?
     private(set) var modelCatalog: HermesModelCatalog?
@@ -205,6 +207,7 @@ import Observation
     func recordRunUpdate(_ run: AgentRun) {
         let previous = runs[run.id]
         runs[run.id] = run
+        recorder?.record(run, previous: previous)
         sessionRevisions[run.sessionID, default: 0] += 1
         // Keep the timeline stable while the streaming answer is visible, but
         // never shrink or blank it: merge the pre-run snapshot into what is
@@ -228,6 +231,7 @@ import Observation
     }
 
     private func apply(_ sid: String, runID: String, event: HermesEvent) {
+        recorder?.record(event: event, runID: runID, sessionID: sid)
         if event.type.hasPrefix("tool.") || event.type.hasPrefix("subagent.") {
             let title = event.data["tool"]?.string ?? event.data["name"]?.string ?? "Agent tool"
             var rows = (activity[sid] ?? []).filter { !$0.finished || $0.runID == runID }
@@ -283,6 +287,7 @@ import Observation
             guard generation == current, sessionRevisions[sid, default: 0] == revision else { return }
             let existing = messages[sid] ?? []
             messages[sid] = ConversationHistory.merge(existing: existing, incoming: page.messages, older: older)
+            recorder?.reconcile(page.messages, sessionID: sid, fallbackTime: sessions.first { $0.id == sid }?.updatedAt ?? 0)
             if !older { historyFetchedAt[sid] = Date().timeIntervalSince1970 }
             if older || existing.count <= page.messages.count { historyHasMore[sid] = page.hasMore }
             if !older {
@@ -402,7 +407,7 @@ import Observation
     /// Claude, Grok and Codex are alternatives here: the caller may name one,
     /// the agent's own last coding session is preferred next, and otherwise Luna
     /// takes the first available. A session is reused when Hermes still has it.
-    func startCodingTask(id: String, prompt: String, backend requested: CodingAgentBackend? = nil) async throws -> CodingTaskStart {
+    func startCodingTask(id: String, prompt: String, backend requested: CodingAgentBackend? = nil, turnID: String? = nil) async throws -> CodingTaskStart {
         guard connected, let remote = backend, let coordinator else { throw ServiceError(message: "Reconnect this agent before starting coding work.") }
         guard profile?.kind != .openAICompatible else {
             throw ServiceError(message: "Coding sessions need a Hermes agent. A generic OpenAI-compatible endpoint has no session or run API.")
@@ -440,7 +445,7 @@ import Observation
             }
         }
         guard generation == current, connected else { throw CancellationError() }
-        let run = try await coordinator.admit(id: id, sessionID: sid, text: text, model: choice.selection)
+        let run = try await coordinator.admit(id: id, sessionID: sid, text: text, model: choice.selection, turnID: turnID)
         saveSoon()
         return CodingTaskStart(run: run, choice: choice, sessionID: sid, reusedSession: reused,
                                available: available, modelLockNote: lockNote)
@@ -511,13 +516,13 @@ import Observation
         } catch is CancellationError { }
         catch { self.error = error.localizedDescription }
     }
-    func executeVoice(_ name: String, arguments: JSONObject, id: String, boundSession sid: String) async throws -> JSONObject {
+    func executeVoice(_ name: String, arguments: JSONObject, id: String, boundSession sid: String, turnID: String? = nil) async throws -> JSONObject {
         guard connected, let backend, let coordinator else { throw ServiceError(message: "Reconnect Hermes first.") }
         switch name {
         case "send_prompt":
             try checkModelReady(sid)
             let run = try await coordinator.admit(id: id, sessionID: sid, text: arguments["prompt"]?.string ?? "",
-                model: sessionModels[sid], automaticModel: usesAutoModel(sid))
+                model: sessionModels[sid], automaticModel: usesAutoModel(sid), turnID: turnID)
             return ["request_id": .string(run.id), "session_id": .string(sid), "status": .string(run.status),
                 "model_mode": .string(run.automaticModel == true ? "auto" : "manual_or_hermes_settings"),
                 "note": .string("Accepted locally; Auto requests choose a model before execution. The result will appear in this session. Do not resend.")]

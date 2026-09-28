@@ -23,7 +23,7 @@ import Foundation
         guard FileManager.default.fileExists(atPath: file.path) else { return [:] }
         return try JSONDecoder().decode([String: AgentRun].self, from: Data(contentsOf: file))
     }
-    func admit(id: String, sessionID: String, text: String, model: HermesModelSelection? = nil, automaticModel: Bool = false, photos: [ChatPhoto] = []) async throws -> AgentRun {
+    func admit(id: String, sessionID: String, text: String, model: HermesModelSelection? = nil, automaticModel: Bool = false, photos: [ChatPhoto] = [], turnID: String? = nil) async throws -> AgentRun {
         if let record = records[id] {
             guard record.text == text && record.sessionID == sessionID && (record.photos ?? []) == photos else { throw ServiceError(message: "That request ID belongs to another prompt.", statusCode: 409) }
             return record
@@ -48,6 +48,7 @@ import Foundation
         record.photos = photos.isEmpty ? nil : photos
         record.modelSelection = model
         record.automaticModel = automaticModel ? true : nil
+        record.turnID = turnID
         try commit(record)
         schedule()
         return record

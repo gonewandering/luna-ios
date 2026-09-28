@@ -31,18 +31,32 @@ struct TranscriptEntry: Codable, Identifiable, Equatable, Sendable {
     var agentName: String? = nil
     /// `lunaToUser` entries that summarize agent output point at the raw entries.
     var summarizes: [String]? = nil
+    var photos: [ChatPhoto]? = nil
+    /// The server history message this entry was reconciled with, once known.
+    var historyID: String? = nil
     var status: Status = .final
     let createdAt: Double
     /// Assigned by the store on first insert; breaks timestamp ties and is
     /// preserved across streaming updates so a row never moves.
     var seq: Int = 0
 
+    /// The same entry stamped with a different time (`createdAt` is otherwise immutable).
+    func retimed(_ time: Double) -> TranscriptEntry {
+        var copy = TranscriptEntry(id: id, turnID: turnID, address: address, kind: kind, source: source, text: text, tool: tool, runID: runID,
+                                   upstreamID: upstreamID, agentName: agentName, summarizes: summarizes, photos: photos, historyID: historyID,
+                                   status: status, createdAt: time, seq: seq)
+        copy.seq = seq
+        return copy
+    }
+
     init(id: String, turnID: String, address: SessionAddress?, kind: Kind, source: Source? = nil, text: String,
          tool: ToolCall? = nil, runID: String? = nil, upstreamID: String? = nil, agentName: String? = nil,
-         summarizes: [String]? = nil, status: Status = .final, createdAt: Double, seq: Int = 0) {
+         summarizes: [String]? = nil, photos: [ChatPhoto]? = nil, historyID: String? = nil, status: Status = .final,
+         createdAt: Double, seq: Int = 0) {
         self.id = id; self.turnID = turnID; self.address = address; self.kind = kind; self.source = source; self.text = text
         self.tool = tool; self.runID = runID; self.upstreamID = upstreamID; self.agentName = agentName
-        self.summarizes = summarizes; self.status = status; self.createdAt = createdAt; self.seq = seq
+        self.summarizes = summarizes; self.photos = photos; self.historyID = historyID; self.status = status
+        self.createdAt = createdAt; self.seq = seq
     }
 }
 
@@ -271,6 +285,15 @@ struct TranscriptEntry: Codable, Identifiable, Equatable, Sendable {
         } catch { try? exec("ROLLBACK"); throw error }
         revision += 1
     }
+    /// Upsert a batch in one transaction.
+    func importOrReplace(_ rows: [TranscriptEntry]) throws {
+        try exec("BEGIN")
+        do {
+            for row in rows { staged.removeValue(forKey: row.id); _ = try write(row) }
+            try exec("COMMIT")
+        } catch { try? exec("ROLLBACK"); throw error }
+        revision += 1
+    }
 
     static func ordered(_ rows: [TranscriptEntry]) -> [TranscriptEntry] {
         rows.sorted { $0.createdAt == $1.createdAt ? $0.seq < $1.seq : $0.createdAt < $1.createdAt }
@@ -288,8 +311,10 @@ struct TranscriptEntry: Codable, Identifiable, Equatable, Sendable {
             kind TEXT NOT NULL, source TEXT, text TEXT NOT NULL,
             tool_name TEXT, tool_arguments TEXT, tool_result TEXT, tool_status TEXT,
             run_id TEXT, upstream_id TEXT, agent_name TEXT, summarizes TEXT,
-            status TEXT NOT NULL, created_at REAL NOT NULL, seq INTEGER NOT NULL
+            status TEXT NOT NULL, created_at REAL NOT NULL, seq INTEGER NOT NULL,
+            photos TEXT, history_id TEXT
         );
+        CREATE INDEX IF NOT EXISTS entries_history ON entries(history_id);
         CREATE INDEX IF NOT EXISTS entries_session ON entries(agent_id, session_id, created_at, seq);
         CREATE INDEX IF NOT EXISTS entries_turn ON entries(turn_id);
         CREATE INDEX IF NOT EXISTS entries_run ON entries(run_id);
@@ -321,13 +346,15 @@ struct TranscriptEntry: Codable, Identifiable, Equatable, Sendable {
             if let existing = try seq(of: row.id) { row.seq = existing } else { row.seq = nextSeq; nextSeq += 1 }
         } else { nextSeq = max(nextSeq, row.seq + 1) }
         let summarizes = try row.summarizes.map { String(decoding: try JSONEncoder().encode($0), as: UTF8.self) }
+        let photos = try row.photos.map { String(decoding: try JSONEncoder().encode($0), as: UTF8.self) }
         try run("""
         INSERT OR REPLACE INTO entries (id, turn_id, agent_id, session_id, kind, source, text, tool_name, tool_arguments, tool_result, tool_status,
-            run_id, upstream_id, agent_name, summarizes, status, created_at, seq)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            run_id, upstream_id, agent_name, summarizes, status, created_at, seq, photos, history_id)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         """, [.text(row.id), .text(row.turnID), opt(row.address?.agentID), opt(row.address?.sessionID), .text(row.kind.rawValue),
               opt(row.source?.rawValue), .text(row.text), opt(row.tool?.name), opt(row.tool?.arguments), opt(row.tool?.result), opt(row.tool?.status),
-              opt(row.runID), opt(row.upstreamID), opt(row.agentName), opt(summarizes), .text(row.status.rawValue), .real(row.createdAt), .int(row.seq)])
+              opt(row.runID), opt(row.upstreamID), opt(row.agentName), opt(summarizes), .text(row.status.rawValue), .real(row.createdAt), .int(row.seq),
+              opt(photos), opt(row.historyID)])
         return row
     }
     private func opt(_ value: String?) -> Value { value.map(Value.text) ?? .null }
@@ -387,11 +414,12 @@ struct TranscriptEntry: Codable, Identifiable, Equatable, Sendable {
         var tool: TranscriptEntry.ToolCall?
         if let name = text(7) { tool = .init(name: name, arguments: text(8) ?? "", result: text(9) ?? "", status: text(10) ?? "completed") }
         let summarizes = text(14).flatMap { try? JSONDecoder().decode([String].self, from: Data($0.utf8)) }
+        let photos = text(18).flatMap { try? JSONDecoder().decode([ChatPhoto].self, from: Data($0.utf8)) }
         return TranscriptEntry(id: text(0) ?? "", turnID: text(1) ?? "",
             address: agentID.flatMap { agent in sessionID.map { SessionAddress(agentID: agent, sessionID: $0) } },
             kind: TranscriptEntry.Kind(rawValue: text(4) ?? "") ?? .agentInterim, source: text(5).flatMap(TranscriptEntry.Source.init),
             text: text(6) ?? "", tool: tool, runID: text(11), upstreamID: text(12), agentName: text(13), summarizes: summarizes,
-            status: TranscriptEntry.Status(rawValue: text(15) ?? "") ?? .final,
+            photos: photos, historyID: text(19), status: TranscriptEntry.Status(rawValue: text(15) ?? "") ?? .final,
             createdAt: sqlite3_column_double(statement, 16), seq: Int(sqlite3_column_int64(statement, 17)))
     }
 }
@@ -433,19 +461,21 @@ enum TranscriptMigration {
                     let run = runs.first { $0.sessionID == sid && $0.text == message.content && !matchedRuns.contains($0.id) }
                     if let run { matchedRuns.insert(run.id) }
                     add(TranscriptEntry(id: message.id, turnID: lastTurn, address: address, kind: .userToLuna, source: .typed, text: message.content,
-                                        runID: run?.id, upstreamID: run?.upstreamID, agentName: profile.name, createdAt: time))
+                                        runID: run?.id, upstreamID: run?.upstreamID, agentName: profile.name, photos: message.photos,
+                                        historyID: message.id, createdAt: time))
                 case "tool":
                     add(TranscriptEntry(id: message.id, turnID: lastTurn, address: address, kind: .agentTool, text: "",
-                                        tool: .init(name: message.toolName ?? "Tool", result: message.content), agentName: profile.name, createdAt: time))
+                                        tool: .init(name: message.toolName ?? "Tool", result: message.content), agentName: profile.name,
+                                        historyID: message.id, createdAt: time))
                 default:
                     add(TranscriptEntry(id: message.id, turnID: lastTurn, address: address, kind: .agentFinal, text: message.content,
-                                        agentName: profile.name, createdAt: time))
+                                        agentName: profile.name, photos: message.photos, historyID: message.id, createdAt: time))
                 }
             }
             for run in runs where run.sessionID == sid && !matchedRuns.contains(run.id) {
                 let turn = "legacy-" + run.id
                 add(TranscriptEntry(id: run.id + "-prompt", turnID: turn, address: address, kind: .userToLuna, source: .typed, text: run.text,
-                                    runID: run.id, upstreamID: run.upstreamID, agentName: profile.name, createdAt: run.created))
+                                    runID: run.id, upstreamID: run.upstreamID, agentName: profile.name, photos: run.photos, createdAt: run.created))
                 if !run.output.isEmpty {
                     add(TranscriptEntry(id: run.id + "-output", turnID: turn, address: address, kind: .agentFinal, text: run.output,
                                         runID: run.id, upstreamID: run.upstreamID, agentName: profile.name,
@@ -466,5 +496,75 @@ enum TranscriptMigration {
         return rows.enumerated().sorted {
             $0.element.createdAt == $1.element.createdAt ? $0.offset < $1.offset : $0.element.createdAt < $1.element.createdAt
         }.map(\.element)
+    }
+}
+/// Folds a page of server history into the transcript. Rows Luna already
+/// captured live are matched (never duplicated); anything else, such as work
+/// from another client, is imported as-is.
+enum TranscriptReconciliation {
+    /// Entries to upsert: matched rows gain `historyID` (and a tool result);
+    /// unmatched history becomes new rows keyed by the server message ID.
+    static func merge(history: [ChatMessage], into existing: [TranscriptEntry], address: SessionAddress, agentName: String,
+                      fallbackTime: Double) -> [TranscriptEntry] {
+        var known = Set(existing.map(\.id)).union(existing.compactMap(\.historyID))
+        var candidates = existing.filter { $0.historyID == nil }
+        var updates: [TranscriptEntry] = []
+        var turn = "history-" + address.sessionID
+        var lastTime = fallbackTime
+        func plausible(_ entry: TranscriptEntry, _ message: ChatMessage) -> Bool {
+            message.createdAt <= 0 || entry.createdAt <= 0 || message.createdAt >= entry.createdAt - 10
+        }
+        func claim(_ index: Int, _ message: ChatMessage, mutate: (inout TranscriptEntry) -> Void = { _ in }) {
+            var entry = candidates.remove(at: index)
+            entry.historyID = message.id
+            mutate(&entry)
+            // The server's clock is authoritative once a row is reconciled, so
+            // live rows sit alongside history fetched from other clients.
+            if message.createdAt > 0 { entry = entry.retimed(message.createdAt) }
+            updates.append(entry); known.insert(message.id); turn = entry.turnID
+        }
+        for message in history {
+            guard !known.contains(message.id) else {
+                if let match = existing.first(where: { $0.id == message.id || $0.historyID == message.id }) { turn = match.turnID }
+                continue
+            }
+            let time = message.createdAt > 0 ? message.createdAt : lastTime
+            lastTime = time
+            switch message.role {
+            case "user":
+                if let index = candidates.firstIndex(where: { $0.kind == .lunaToAgent && $0.text == message.content
+                        && ($0.photos ?? []).map(\.hash) == (message.photos ?? []).map(\.hash) && plausible($0, message) }) {
+                    claim(index, message)
+                } else {
+                    turn = "history-" + message.id
+                    updates.append(TranscriptEntry(id: message.id, turnID: turn, address: address, kind: .userToLuna, text: message.content,
+                                                   agentName: agentName, photos: message.photos, historyID: message.id, createdAt: time))
+                    known.insert(message.id)
+                }
+            case "tool":
+                let name = message.toolName ?? "Tool"
+                // Live tool rows carry only a preview, so match by name within the
+                // current turn (the run whose prompt was just claimed) and time.
+                if let index = candidates.firstIndex(where: { $0.kind == .agentTool && $0.tool?.name == name && $0.turnID == turn }) {
+                    claim(index, message) { $0.tool?.result = message.content }
+                } else {
+                    updates.append(TranscriptEntry(id: message.id, turnID: turn, address: address, kind: .agentTool, text: "",
+                                                   tool: .init(name: name, result: message.content), agentName: agentName,
+                                                   historyID: message.id, createdAt: time))
+                    known.insert(message.id)
+                }
+            default:
+                // Live output rows are stamped when text first arrives, which can
+                // trail the server's clock; the turn and text identify them.
+                if let index = candidates.firstIndex(where: { $0.kind == .agentFinal && $0.text == message.content && ($0.turnID == turn || plausible($0, message)) }) {
+                    claim(index, message)
+                } else {
+                    updates.append(TranscriptEntry(id: message.id, turnID: turn, address: address, kind: .agentFinal, text: message.content,
+                                                   agentName: agentName, photos: message.photos, historyID: message.id, createdAt: time))
+                    known.insert(message.id)
+                }
+            }
+        }
+        return updates
     }
 }

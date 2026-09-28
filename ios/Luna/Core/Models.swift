@@ -92,6 +92,8 @@ struct AgentRun: Codable, Identifiable, Equatable, Sendable {
     var modelSelection: HermesModelSelection? = nil
     var automaticModel: Bool? = nil
     var modelDecision: AutoModelDecision? = nil
+    /// The Luna conversation turn that produced this request, when known.
+    var turnID: String? = nil
     var isActive: Bool { !["completed", "cancelled", "failed", "interrupted", "unknown"].contains(status) }
     var hasUnsentPrompt: Bool { upstreamID == nil && ["failed", "cancelled"].contains(status) }
     var statusLabel: String {
@@ -110,7 +112,7 @@ struct AgentRun: Codable, Identifiable, Equatable, Sendable {
         }
     }
     enum CodingKeys: String, CodingKey {
-        case id, text, status, output, error, created, upstreamID, history, stopRequested, historyReconciled, responseInstructions, modelSelection, automaticModel, modelDecision, photos
+        case id, text, status, output, error, created, upstreamID, history, stopRequested, historyReconciled, responseInstructions, modelSelection, automaticModel, modelDecision, photos, turnID
         case sessionID = "session_id"
     }
 }
