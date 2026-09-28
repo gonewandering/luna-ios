@@ -26,6 +26,11 @@ import Observation
         return RTCPeerConnectionFactory()
     }()
 
+    /// Segmented spoken turns from the live session; set before `start`.
+    @ObservationIgnored var onTurn: ((VoiceTurnSegmenter.Turn) -> Void)?
+    /// The spoken user turn that current backend work belongs to.
+    var currentTurnID: String? { live?.currentTurnID }
+
     func start(key: String, sessionID: String, title: String, global: Bool = false, initialContext: JSONObject = [:], execute: @escaping (String, JSONObject, String) async throws -> JSONObject, transcript: @escaping (String, String) -> Void, switchSession: @escaping (String) -> Void) async throws {
         await stop()
         let current = UUID()
@@ -76,6 +81,7 @@ import Observation
             let control = OpenAILiveSession(key: key, sessionID: sessionID, title: title, global: global, initialContext: initialContext, execute: execute)
             live = control
             control.onTranscript = transcript
+            control.onTurn = onTurn
             control.onSwitch = switchSession
             control.onFailure = { [weak self] message in
                 Task { @MainActor in

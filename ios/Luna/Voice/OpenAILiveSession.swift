@@ -108,6 +108,11 @@ import CryptoKit
     private(set) var id: String?
     private(set) var closed = false
     var onTranscript: ((String, String) -> Void)?
+    /// Segmented spoken turns (user and Luna), reported as they grow and close.
+    var onTurn: ((VoiceTurnSegmenter.Turn) -> Void)? { didSet { segmenter.onTurn = onTurn } }
+    let segmenter: VoiceTurnSegmenter
+    /// The user turn the current backend work belongs to, for transcript linkage.
+    var currentTurnID: String? { segmenter.currentUserTurnID }
     var onClosed: (() -> Void)?
     var onSwitch: ((String) -> Void)?
     var sendOverride: ((JSONObject) async throws -> Void)?
@@ -133,6 +138,7 @@ import CryptoKit
     init(key: String, sessionID: String, title: String, global: Bool = false, initialContext: JSONObject = [:], execute: @escaping (String, JSONObject, String) async throws -> JSONObject) {
         self.key = key; self.sessionID = sessionID; self.title = title; self.execute = execute
         self.global = global; self.initialContext = initialContext
+        segmenter = VoiceTurnSegmenter(prefix: "voice-" + UUID().uuidString.lowercased())
         http = APIClient(url: URL(string: "https://api.openai.com")!, token: key, label: "OpenAI")
     }
     func start(sdp: String) async throws -> VoiceAnswer {
@@ -193,9 +199,14 @@ import CryptoKit
         let type = event["type"]?.string ?? ""
         if type == "session.closed" {
             closed = true
+            segmenter.close()
             if !ending { onClosed?() }
         } else if type == "session.input_transcript.delta" || type == "session.output_transcript.delta" {
-            onTranscript?(type.contains("input") ? "user" : "assistant", event["delta"]?.string ?? "")
+            let role = type.contains("input") ? "user" : "assistant", delta = event["delta"]?.string ?? ""
+            onTranscript?(role, delta)
+            segmenter.delta(role: role, text: delta, startMs: event["start_ms"]?.number, endMs: event["end_ms"]?.number)
+        } else if type == "session.delegation.created" {
+            segmenter.delegationStarted()
         } else if type == "error" {
             if !ending { onFailure?("OpenAI rejected a voice operation. Restart voice to recover.") }
         } else if type == "response.event", let nested = event["event"]?.object {
