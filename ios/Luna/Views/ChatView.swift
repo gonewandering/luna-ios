@@ -11,7 +11,7 @@ struct ChatView: View {
     @State private var followingLatest = true
     @State private var userScrolling = false
     @State private var bottomScrollRequest = 0
-    @State private var scrollPosition = ScrollPosition(edge: .bottom)
+    @State private var scrollPosition = ScrollPosition(edge: TranscriptDebug.expandAll ? .top : .bottom)
     @FocusState private var composerFocused: Bool
     private var sessionRuns: [AgentRun] {
         Self.visibleRuns(sessionID: session.id, runs: store.runs.values)
@@ -37,13 +37,20 @@ struct ChatView: View {
                     Button("Load earlier messages") { Task { await store.loadMessages(session.id, older: true) } }
                         .font(.caption).frame(maxWidth: .infinity)
                 }
-                ForEach(store.messages[session.id] ?? []) { message in
-                    MessageView(message: message, agentName: store.agentName).id(message.id)
+                if store.hasTranscript {
+                    TranscriptView(entries: store.transcript(session.id), agentName: store.agentName)
+                    ForEach(sessionRuns.filter { run in run.isActive || store.notices.contains(TransientNotices.run(run.id)) || store.approvals.values.contains { $0.runID == run.id } }) { run in
+                        RunControls(store: store, run: run)
+                    }
+                } else {
+                    ForEach(store.messages[session.id] ?? []) { message in
+                        MessageView(message: message, agentName: store.agentName).id(message.id)
+                    }
+                    ForEach(sessionRuns) { run in
+                        RunCard(store: store, run: run)
+                    }
                 }
-                ForEach(sessionRuns) { run in
-                    RunCard(store: store, run: run)
-                }
-                if (store.messages[session.id] ?? []).isEmpty && sessionRuns.isEmpty {
+                if (store.hasTranscript ? store.transcript(session.id).isEmpty : (store.messages[session.id] ?? []).isEmpty) && sessionRuns.isEmpty {
                     VStack(alignment: .leading, spacing: 12) {
                         LunaMark(size: 56)
                         Text("What’s on your mind?").font(.system(size: 30, design: .serif))
@@ -54,7 +61,7 @@ struct ChatView: View {
             }.padding(.horizontal, 22).padding(.bottom, 19)
         }
         .scrollPosition($scrollPosition)
-        .defaultScrollAnchor(.bottom, for: .initialOffset)
+        .defaultScrollAnchor(TranscriptDebug.expandAll ? .top : .bottom, for: .initialOffset)
         // Let SwiftUI preserve the content edge through lazy measurement and
         // keyboard resizing; switching to top anchoring preserves a reader's offset.
         .defaultScrollAnchor(followingLatest && !userScrolling ? .bottom : .top, for: .sizeChanges)
@@ -83,8 +90,15 @@ struct ChatView: View {
         .onChange(of: followingLatest && !userScrolling) { _, follow in
             if follow { bottomScrollRequest += 1 }
         }
+        .task {
+            // Screenshot aid: --scroll-to <entry id> positions a row at the top.
+            guard TranscriptDebug.expandAll, let index = ProcessInfo.processInfo.arguments.firstIndex(of: "--scroll-to"),
+                  index + 1 < ProcessInfo.processInfo.arguments.count else { return }
+            try? await Task.sleep(for: .seconds(2))
+            scrollPosition.scrollTo(id: ProcessInfo.processInfo.arguments[index + 1], anchor: .top)
+        }
         .task(id: bottomScrollRequest) {
-            guard bottomScrollRequest > 0 else { return }
+            guard bottomScrollRequest > 0, !TranscriptDebug.expandAll else { return }
             // Let lazy rows finish their current layout before resolving the edge.
             await Task.yield()
             guard !Task.isCancelled, followingLatest, !userScrolling else { return }
@@ -193,7 +207,7 @@ private struct RunCard: View {
     let run: AgentRun
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
-            MessageView(message: ChatMessage(id: run.id + "-user", role: "user", content: run.text, createdAt: run.created, photos: run.photos))
+            MessageView(message: ChatMessage(id: run.id + "-user", role: "user", content: run.text, createdAt: run.created, photos: run.photos), agentName: store.agentName)
             if run.isActive {
                 HStack {
                     ProgressView().controlSize(.mini)
@@ -225,7 +239,7 @@ private struct RunCard: View {
             }
             ForEach(store.approvals.values.filter { $0.sessionID == run.sessionID && $0.runID == run.id }.sorted { $0.id < $1.id }) { approval in
                 VStack(alignment: .leading, spacing: 12) {
-                    Label("Hermes needs your approval", systemImage: "hand.raised").font(.headline)
+                    Label(store.agentName + " needs your approval", systemImage: "hand.raised").font(.headline)
                     Text(approval.description).font(.system(.callout, design: .monospaced)).textSelection(.enabled)
                     HStack {
                         Button("Deny") { Task { await store.resolve(approval, choice: "deny") } }.buttonStyle(.bordered)
@@ -250,9 +264,51 @@ private struct RunCard: View {
     }
 }
 
+/// Live status, stop, model decision and approvals for a run whose messages
+/// the transcript already shows.
+private struct RunControls: View {
+    @Bindable var store: AppStore
+    let run: AgentRun
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if run.isActive {
+                HStack {
+                    ProgressView().controlSize(.mini)
+                    Text(run.statusLabel).font(.caption.weight(.medium))
+                    Spacer()
+                    Button(store.profile?.kind == .openAICompatible ? "Stop reply" : "Stop agent", role: .destructive) { Task { await store.stopRun(run.id) } }
+                        .font(.caption).disabled(run.status == "stopping")
+                }.foregroundStyle(Palette.muted)
+                if let decision = run.modelDecision {
+                    Label("Auto requested " + decision.selection.model, systemImage: "sparkles").font(.caption.weight(.medium)).foregroundStyle(Palette.forest)
+                }
+            } else if store.notices.contains(TransientNotices.run(run.id)) {
+                NoticeCard(dismissLabel: "Dismiss task status", dismiss: { store.notices.dismiss(TransientNotices.run(run.id)) }) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label(run.statusLabel, systemImage: run.status == "completed" ? "checkmark.circle" : "exclamationmark.circle")
+                            .font(.caption.weight(.medium)).foregroundStyle(Palette.muted)
+                        if let error = run.error, run.status != "completed" { Text(error).font(.callout).foregroundStyle(Palette.orange).textSelection(.enabled) }
+                    }.padding(.vertical, 8)
+                }
+            }
+            ForEach(store.approvals.values.filter { $0.runID == run.id }.sorted { $0.id < $1.id }) { approval in
+                VStack(alignment: .leading, spacing: 12) {
+                    Label(store.agentName + " needs your approval", systemImage: "hand.raised").font(.headline)
+                    Text(approval.description).font(.system(.callout, design: .monospaced)).textSelection(.enabled)
+                    HStack {
+                        Button("Deny") { Task { await store.resolve(approval, choice: "deny") } }.buttonStyle(.bordered)
+                        Button("Allow once") { Task { await store.resolve(approval, choice: "once") } }.buttonStyle(.borderedProminent)
+                            .foregroundStyle(Palette.onAccent)
+                    }
+                }.padding(16).background(Palette.userBubble, in: RoundedRectangle(cornerRadius: 16))
+            }
+        }.id("controls-" + run.id)
+    }
+}
+
 struct MessageView: View {
     let message: ChatMessage
-    var agentName: String = "Hermes"
+    let agentName: String
     var body: some View {
         if message.role == "user" {
             VStack(alignment: .trailing, spacing: 7) {

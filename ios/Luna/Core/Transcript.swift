@@ -64,7 +64,7 @@ struct TranscriptEntry: Codable, Identifiable, Equatable, Sendable {
 /// rows. Streaming writes are staged and coalesced so a token stream does not
 /// hit disk on every delta; reads always reflect staged text.
 @MainActor @Observable final class TranscriptStore {
-    static let schemaVersion: Int32 = 1
+    static let schemaVersion: Int32 = 2
     static let flushInterval: Duration = .milliseconds(500)
     private(set) var revision = 0
     @ObservationIgnored let file: URL?
@@ -183,6 +183,19 @@ struct TranscriptEntry: Codable, Identifiable, Equatable, Sendable {
         if let limit { sql += " LIMIT ?"; values.append(.int(limit)) }
         var rows = try query(sql, values).reversed().map { $0 }
         for entry in staged.values where entry.address == address && (before.map { entry.createdAt < $0 } ?? true) {
+            if let index = rows.firstIndex(where: { $0.id == entry.id }) { rows[index] = entry } else { rows.append(entry) }
+        }
+        return Self.ordered(rows)
+    }
+    /// Rows Luna took part in, across every session: user turns, Luna's tools
+    /// and replies, and the handoffs, plus the outputs those replies summarize.
+    func lunaTimeline(limit: Int) throws -> [TranscriptEntry] {
+        var rows = try query("""
+        SELECT * FROM entries WHERE kind IN ('userToLuna','lunaTool','lunaToAgent','lunaToUser')
+           OR id IN (SELECT value FROM entries, json_each(entries.summarizes) WHERE entries.kind = 'lunaToUser')
+        ORDER BY created_at DESC, seq DESC LIMIT ?
+        """, [.int(limit)]).reversed().map { $0 }
+        for entry in staged.values where [.userToLuna, .lunaTool, .lunaToAgent, .lunaToUser].contains(entry.kind) {
             if let index = rows.firstIndex(where: { $0.id == entry.id }) { rows[index] = entry } else { rows.append(entry) }
         }
         return Self.ordered(rows)
@@ -314,7 +327,6 @@ struct TranscriptEntry: Codable, Identifiable, Equatable, Sendable {
             status TEXT NOT NULL, created_at REAL NOT NULL, seq INTEGER NOT NULL,
             photos TEXT, history_id TEXT
         );
-        CREATE INDEX IF NOT EXISTS entries_history ON entries(history_id);
         CREATE INDEX IF NOT EXISTS entries_session ON entries(agent_id, session_id, created_at, seq);
         CREATE INDEX IF NOT EXISTS entries_turn ON entries(turn_id);
         CREATE INDEX IF NOT EXISTS entries_run ON entries(run_id);
@@ -330,8 +342,21 @@ struct TranscriptEntry: Codable, Identifiable, Equatable, Sendable {
             INSERT INTO entries_fts(entries_fts, rowid, text, tool_name, tool_arguments, tool_result) VALUES ('delete', old.rowid, old.text, old.tool_name, old.tool_arguments, old.tool_result);
             INSERT INTO entries_fts(rowid, text, tool_name, tool_arguments, tool_result) VALUES (new.rowid, new.text, new.tool_name, new.tool_arguments, new.tool_result);
         END;
-        PRAGMA user_version = \(Self.schemaVersion);
         """)
+        // Additive upgrades: each version adds columns; the DDL above is for new files.
+        let version = Int32(try scalarInt("PRAGMA user_version") ?? 0)
+        if version < 2 {
+            let columns = try columnNames("entries")
+            if !columns.contains("photos") { try exec("ALTER TABLE entries ADD COLUMN photos TEXT") }
+            if !columns.contains("history_id") { try exec("ALTER TABLE entries ADD COLUMN history_id TEXT") }
+        }
+        try exec("CREATE INDEX IF NOT EXISTS entries_history ON entries(history_id)")
+        try exec("PRAGMA user_version = \(Self.schemaVersion)")
+    }
+    private func columnNames(_ table: String) throws -> Set<String> {
+        var names = Set<String>()
+        try forEachRow("PRAGMA table_info(\(table))", []) { if let text = sqlite3_column_text($0, 1) { names.insert(String(cString: text)) } }
+        return names
     }
     private static func protect(_ file: URL) throws {
         try FileManager.default.setAttributes([.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication], ofItemAtPath: file.path)
@@ -563,6 +588,23 @@ enum TranscriptReconciliation {
                                                    agentName: agentName, photos: message.photos, historyID: message.id, createdAt: time))
                     known.insert(message.id)
                 }
+            }
+        }
+        // Re-stamping a live row to the server's clock must not reorder it against
+        // its own turn: everything that followed it locally is nudged after it.
+        let retimed = updates.filter { updated in existing.contains { $0.id == updated.id && $0.createdAt != updated.createdAt } }
+        for moved in retimed {
+            let siblings = existing.filter { $0.turnID == moved.turnID }
+            guard let position = siblings.firstIndex(where: { $0.id == moved.id }) else { continue }
+            var floor = moved.createdAt
+            for sibling in siblings[(position + 1)...] {
+                let current = updates.first { $0.id == sibling.id } ?? sibling
+                // Rows the server has stamped keep their time; only local-only rows move.
+                if current.historyID != nil { continue }
+                if current.createdAt > floor { floor = current.createdAt; continue }
+                floor += 0.001
+                let bumped = current.retimed(floor)
+                if let index = updates.firstIndex(where: { $0.id == sibling.id }) { updates[index] = bumped } else { updates.append(bumped) }
             }
         }
         return updates

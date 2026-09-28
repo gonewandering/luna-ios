@@ -39,7 +39,7 @@ import Observation
     var voiceTranscript = ""
     var voice = VoiceController()
     private(set) var profile: AgentProfile?
-    var agentName: String { profile?.name ?? (demo ? "Demo" : "Hermes") }
+    var agentName: String { profile?.name ?? (demo ? "Demo" : "Agent") }
     var voiceTargetsSession: Bool { profile == nil || voice.agentID == profile?.id }
     private(set) var historyFetchedAt: [String: Double] = [:]
     @ObservationIgnored var onVoiceRequest: ((String) async -> Void)?
@@ -48,6 +48,13 @@ import Observation
     @ObservationIgnored var makeBackend: (() throws -> any AgentBackend)?
     /// Set by LunaStore; records every run, tool event and history page.
     @ObservationIgnored var recorder: TranscriptRecorder?
+    /// The durable timeline for a session. Observing `revision` keeps views live.
+    func transcript(_ sid: String) -> [TranscriptEntry] {
+        guard let recorder, let profile else { return [] }
+        _ = recorder.store.revision
+        return (try? recorder.store.entries(SessionAddress(agentID: profile.id, sessionID: sid))) ?? []
+    }
+    var hasTranscript: Bool { recorder != nil && profile != nil }
     @ObservationIgnored private var managedCacheURL: URL?
     @ObservationIgnored private var hydrationTask: Task<Void, Never>?
     private(set) var modelCatalog: HermesModelCatalog?
@@ -248,7 +255,7 @@ import Observation
             else { notices.dismiss(TransientNotices.activity(sid)) }
         } else if event.type == "approval.request", let aid = event.data["approval_id"]?.string ?? event.data["request_id"]?.string {
             approvals[aid] = PendingApproval(id: aid, runID: runID, sessionID: sid,
-                description: event.data["command"]?.string ?? event.data["description"]?.string ?? "Hermes needs your approval.")
+                description: event.data["command"]?.string ?? event.data["description"]?.string ?? agentName + " needs your approval.")
         }
     }
     func select(_ sid: String) async {

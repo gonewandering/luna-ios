@@ -56,6 +56,22 @@ struct LunaTextPreview: View {
     }
 }
 
+/// Consecutive Luna-timeline rows that share a destination, so the sheet can
+/// label where each part of the conversation went.
+struct LunaTimelineSection: Identifiable {
+    let address: SessionAddress?
+    var entries: [TranscriptEntry]
+    var id: String { entries.first?.id ?? "" }
+    static func split(_ rows: [TranscriptEntry]) -> [LunaTimelineSection] {
+        var sections: [LunaTimelineSection] = []
+        for row in rows {
+            if let last = sections.indices.last, sections[last].address == row.address { sections[last].entries.append(row) }
+            else { sections.append(LunaTimelineSection(address: row.address, entries: [row])) }
+        }
+        return sections
+    }
+}
+
 struct LunaConversationView: View {
     @Bindable var store: LunaStore
     @Bindable var conversation: LunaTextConversation
@@ -66,13 +82,24 @@ struct LunaConversationView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 26) {
-                        ForEach(conversation.messages) { MessageView(message: $0, agentName: "Luna") }
+                        let timeline = store.lunaTimeline
+                        ForEach(LunaTimelineSection.split(timeline)) { section in
+                            if let address = section.address, let agent = store.profiles.first(where: { $0.id == address.agentID }) {
+                                HStack(spacing: 7) {
+                                    Rectangle().fill(Palette.line).frame(height: 1)
+                                    Text((agent.name + " · " + (store.session(address)?.title ?? "Session")).uppercased())
+                                        .font(.system(size: 9, weight: .semibold)).tracking(1.5).lineLimit(1)
+                                    Rectangle().fill(Palette.line).frame(height: 1)
+                                }.foregroundStyle(Palette.sectionLabel)
+                            }
+                            TranscriptView(entries: section.entries, agentName: section.entries.first.map(store.agentName(for:)) ?? "Agent")
+                        }
                         if conversation.sending { ProgressView("Luna is thinking…").font(.callout).tint(Palette.forest) }
                         Color.clear.frame(height: 12).id("latest")
                     }.padding(22)
                 }.defaultScrollAnchor(.bottom).defaultScrollAnchor(.top, for: .alignment)
                     .scrollDismissesKeyboard(.interactively)
-                    .onChange(of: conversation.messages.last, initial: true) { _, _ in proxy.scrollTo("latest", anchor: .bottom) }
+                    .onChange(of: store.transcripts.revision, initial: true) { _, _ in proxy.scrollTo("latest", anchor: .bottom) }
                     .safeAreaInset(edge: .bottom, spacing: 0) {
                         VStack(spacing: 0) {
                             LunaErrorNotice(store: store)

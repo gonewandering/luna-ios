@@ -27,6 +27,7 @@ import AVFoundation
                             runtime.previewNotices(); runtime.saveNow()
                             if let session = runtime.sessions.first { store.open(SessionAddress(agentID: profile.id, sessionID: session.id)) }
                         }
+                        if ProcessInfo.processInfo.arguments.contains("--preview-transcript") { await store.previewTranscript() }
                         return
                     }
                     let environment = ProcessInfo.processInfo.environment

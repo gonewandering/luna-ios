@@ -84,6 +84,23 @@ final class TranscriptCaptureTests: XCTestCase {
         XCTAssertEqual(try store.entries(address).map(\.id), ["h0", "h0a", "r1-prompt", "r1-tool-1", "r1-output", "h4"])
     }
 
+    @MainActor func testReconciliationKeepsTurnOrderWhenServerClockIsLater() throws {
+        let store = try TranscriptStore(file: nil)
+        let address = SessionAddress(agentID: "agent-a", sessionID: "s1")
+        let recorder = TranscriptRecorder(store: store, agentID: "agent-a") { "Jetson" }
+        try store.upsert(TranscriptEntry(id: "turn-1", turnID: "turn-1", address: address, kind: .userToLuna, text: "ask", createdAt: 100))
+        var run = AgentRun(id: "r1", sessionID: "s1", text: "Deploy", status: "completed", output: "Done", created: 100.5)
+        run.turnID = "turn-1"
+        recorder.record(run, previous: nil)
+        // Luna replied before Hermes stamped the user message.
+        try store.upsert(TranscriptEntry(id: "turn-1-reply", turnID: "turn-1", address: address, kind: .lunaToUser, text: "Asked.", createdAt: 100.7))
+        recorder.reconcile([ChatMessage(id: "h1", role: "user", content: "Deploy", createdAt: 103), ChatMessage(id: "h2", role: "assistant", content: "Done", createdAt: 104)],
+                           sessionID: "s1", fallbackTime: 0)
+        XCTAssertEqual(try store.entries(address).map(\.id), ["turn-1", "r1-prompt", "turn-1-reply", "r1-output"])
+        XCTAssertEqual(try store.entry("r1-prompt")?.createdAt, 103)
+        XCTAssertGreaterThan(try XCTUnwrap(try store.entry("turn-1-reply")?.createdAt), 103)
+    }
+
     @MainActor func testTypedLunaTurnRecordsUserToolsHandoffAndReply() async throws {
         let root = temporary(); defer { try? FileManager.default.removeItem(at: root) }
         let vault = TestVault(), backend = RecordingAgent(label: "A")

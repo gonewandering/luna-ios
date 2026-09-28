@@ -490,6 +490,16 @@ struct HomeSession: Identifiable {
     }
     // MARK: Transcript capture
 
+    /// Everything Luna has been part of, across sessions, newest last: the
+    /// Luna-only thread plus routed turns. Observes the store's revision.
+    var lunaTimeline: [TranscriptEntry] {
+        _ = transcripts.revision
+        return (try? transcripts.lunaTimeline(limit: 200)) ?? []
+    }
+    func agentName(for entry: TranscriptEntry) -> String {
+        entry.address.flatMap { id in profiles.first { $0.id == id.agentID }?.name } ?? entry.agentName ?? "Agent"
+    }
+
     /// Spoken turns stream in as fragments; the row is staged while open and
     /// committed when the segmenter closes it. User turns live under the voice
     /// target (if any) until Luna routes them; Luna's speech follows the turn.
@@ -623,6 +633,30 @@ struct HomeSession: Identifiable {
         try? memory.save()
         if background { try? transcripts.flush() }
     }
+    #if DEBUG && targetEnvironment(simulator)
+    /// Drive one full turn through the demo agent so every transcript leg is
+    /// visible: a typed request, Luna's lookups, the handoff, the demo's tool
+    /// event and streamed answer, then Luna's summary. Local only.
+    func previewTranscript() async {
+        guard let profile = profiles.first, let runtime = runtimes[profile.id], let session = runtime.sessions.first else { return }
+        let address = SessionAddress(agentID: profile.id, sessionID: session.id)
+        let turnID = "preview-turn"
+        recordUserTurn(turnID, text: "Ask " + profile.name + " how we should connect voice to the agent, and keep it short.", source: .spoken, address: nil)
+        _ = try? await executeVoice("find_agents", arguments: ["name": .string(profile.name)], id: "preview-find", turnID: turnID)
+        _ = try? await executeVoice("list_sessions", arguments: ["agent_id": .string(profile.id), "offset": .number(0)], id: "preview-list", turnID: turnID)
+        _ = try? await executeVoice("send_prompt", arguments: ["agent_id": .string(address.agentID), "session_id": .string(address.sessionID),
+                                                              "prompt": .string("How should we connect voice to the agent? Keep it short.")], id: "preview-send", turnID: turnID)
+        recordLunaReply(turnID, text: "I've asked " + profile.name + " in “" + session.title + "”. I'll summarize when it answers.", address: address)
+        for _ in 0..<600 {
+            if let run = runtime.runs["preview-send"], !run.isActive { break }
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+        recordLunaReply(turnID, text: profile.name + " suggests keeping each request bound to its session and streaming the answer back; the full response, including the sample table and code, is below.",
+                        summarizes: [TranscriptRecorder.outputID("preview-send")], address: address)
+        open(address)
+    }
+    #endif
+
     func startDemo() async {
         demo = true; started = true
         for runtime in runtimes.values { await runtime.disconnect() }

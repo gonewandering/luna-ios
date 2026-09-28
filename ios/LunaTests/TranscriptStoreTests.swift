@@ -1,4 +1,5 @@
 import XCTest
+import SQLite3
 @testable import Luna
 
 final class TranscriptStoreTests: XCTestCase {
@@ -200,6 +201,27 @@ final class TranscriptStoreTests: XCTestCase {
         XCTAssertNotNil(store.storageError)
         try store.transcripts.upsert(TranscriptEntry(id: "x", turnID: "t", address: nil, kind: .userToLuna, text: "still works", createdAt: 1))
         XCTAssertEqual(try store.transcripts.entries(nil).count, 1)
+    }
+
+    @MainActor func testOlderSchemaIsUpgradedInPlace() throws {
+        let root = temporary(); defer { try? FileManager.default.removeItem(at: root) }
+        let file = root.appending(path: "transcript.sqlite")
+        // A version-1 file: no photos/history_id columns, one row.
+        var db: OpaquePointer?
+        XCTAssertEqual(sqlite3_open(file.path, &db), SQLITE_OK)
+        XCTAssertEqual(sqlite3_exec(db, """
+        CREATE TABLE entries (id TEXT PRIMARY KEY NOT NULL, turn_id TEXT NOT NULL, agent_id TEXT, session_id TEXT, kind TEXT NOT NULL, source TEXT,
+            text TEXT NOT NULL, tool_name TEXT, tool_arguments TEXT, tool_result TEXT, tool_status TEXT, run_id TEXT, upstream_id TEXT, agent_name TEXT,
+            summarizes TEXT, status TEXT NOT NULL, created_at REAL NOT NULL, seq INTEGER NOT NULL);
+        INSERT INTO entries VALUES ('old', 't', 'agent-a', 's1', 'userToLuna', 'typed', 'from v1', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'final', 5, 1);
+        PRAGMA user_version = 1;
+        """, nil, nil, nil), SQLITE_OK)
+        sqlite3_close(db)
+        let store = try TranscriptStore(file: file)
+        XCTAssertEqual(try store.entry("old")?.text, "from v1")
+        var upgraded = try XCTUnwrap(try store.entry("old")); upgraded.historyID = "h1"
+        try store.upsert(upgraded)
+        XCTAssertEqual(try TranscriptStore(file: file).entry("old")?.historyID, "h1")
     }
 
     private func entry(_ id: String, _ kind: TranscriptEntry.Kind, _ text: String, at time: Double,
