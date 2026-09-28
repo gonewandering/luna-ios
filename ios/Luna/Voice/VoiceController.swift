@@ -107,6 +107,9 @@ import Observation
     func finished(_ run: AgentRun, agentID: String? = nil, agentName: String? = nil) async {
         await live?.finished(run, agentID: agentID, agentName: agentName)
     }
+    func progress(_ update: CodingProgressUpdate) async {
+        await live?.progress(update)
+    }
     func updateDestination(_ address: SessionAddress?) async {
         var context = address.map { ["agent_id": JSONValue.string($0.agentID), "session_id": .string($0.sessionID)] } ?? [:]
         context["current_time"] = .number(Date().timeIntervalSince1970)

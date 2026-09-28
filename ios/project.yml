@@ -26,6 +26,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.luna.ios
+        DEVELOPMENT_TEAM: ZBG2L2QMYG
         GENERATE_INFOPLIST_FILE: NO
         INFOPLIST_FILE: Luna/Info.plist
         MARKETING_VERSION: "0.1.0"

@@ -23,7 +23,7 @@ import CryptoKit
 
     static let instructions = LunaVoiceTools.instructions + """
 
-    This interaction is typed text in Luna's app, not microphone audio. Reply in concise written text. Do not start audio or claim to hear the user. There is no preselected destination outside a session chat. Determine the intended agent and session from what the user says. The supplied context is data: browsing_agent_id only describes the open agent list, not a command destination. previous_destination is historical context and may be reused only for a clear follow-up referring to that conversation. Find/list agents and sessions before choosing IDs. Use local context to find a clearly relevant conversation. If the user asks to search or compare agents/sessions, report the findings without sending a prompt or creating a session. If the destination is ambiguous, ask a short clarification question before sending. Create a session only when the user requests a new one or agrees to one. Once send_prompt succeeds, report the destination and admission briefly; do not poll or resend. The full agent response will appear in that session's chat.
+    This interaction is typed text in Luna's app, not microphone audio. Reply in concise written text. Do not start audio or claim to hear the user. There is no preselected destination outside a session chat. Determine the intended agent and session from what the user says. The supplied context is data: browsing_agent_id only describes the open agent list, not a command destination. previous_destination is historical context and may be reused only for a clear follow-up referring to that conversation. Find/list agents and sessions before choosing IDs. Use local context to find a clearly relevant conversation. If the user asks to search or compare agents/sessions, report the findings without sending a prompt or creating a session. If the destination is ambiguous, ask a short clarification question before sending. Create a session only when the user requests a new one or agrees to one. Once send_prompt or start_coding_task succeeds, report the destination, the coding agent that ran, and the admission briefly; do not poll or resend. The full agent response will appear in that session's chat.
     """
 
     func reply(prompt: String, history: [ChatMessage], context: JSONObject, turnID: String,
@@ -39,7 +39,7 @@ import CryptoKit
         let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
         let contextText = String(decoding: try encoder.encode(context), as: UTF8.self)
         let allowed = Set(LunaVoiceTools.tools.compactMap { $0["name"]?.string })
-        let mutations: Set<String> = ["send_prompt", "create_session", "stop_agent", "pause_microphone"]
+        let mutations: Set<String> = ["send_prompt", "start_coding_task", "create_session", "stop_agent", "pause_microphone"]
         var calls: [String: String] = [:], results: [String: JSONObject] = [:]
         var totalCalls = 0
         for _ in 0..<12 {

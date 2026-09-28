@@ -8,9 +8,11 @@
 
 /* Begin PBXBuildFile section */
 		04DA6E5C955CE75DCC265287 /* LunaVoiceTools.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF7A644E6F06D5D82786CBCC /* LunaVoiceTools.swift */; };
+		09C4F2D73A3CC8889ED7161A /* CodingProgressReporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B8A80D16591DCF4C398C87D /* CodingProgressReporter.swift */; };
 		0BA4C4EF3498F60D61A34FE0 /* LunaTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDF59CED60218ECEC6977138 /* LunaTests.swift */; };
 		1CAB49EBF924D4AEA7CA0B46 /* ChatPhotoControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = BABAEBA38760C0ABFB68D8CD /* ChatPhotoControls.swift */; };
 		1F5EB897369B687077E805F9 /* DemoBackend.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D003B67552AAA3BB9F8F809 /* DemoBackend.swift */; };
+		29A9DA131C4A6D3A00F2CFAA /* CodingAgentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1390E41162708E73D07FA46 /* CodingAgentTests.swift */; };
 		2FC82693FCFF9BA868808220 /* LiveConnectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74B13D10D3551746B180EB9F /* LiveConnectionTests.swift */; };
 		2FD3D00D0BE5713FE25A5594 /* WebRTC in Frameworks */ = {isa = PBXBuildFile; productRef = 6AC5D36286B41C269A1986A1 /* WebRTC */; };
 		32928C20963CA975535D15AD /* AgentsSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 740E3247864031E85FC89C7E /* AgentsSettingsView.swift */; };
@@ -30,6 +32,7 @@
 		672161572B5581E4732EFECF /* NoticeCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = B42DC2311D4BE8F5AFA81672 /* NoticeCard.swift */; };
 		706B7C69FC62D19D069703F6 /* ChatPhoto.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B62B1520960DBF0EB2897C3 /* ChatPhoto.swift */; };
 		741130FDCBC245770ED2136D /* MultiAgentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F43D3DE575F4C271CC601EDF /* MultiAgentTests.swift */; };
+		84E0EAB69F2E15161CC5CA04 /* CodingAgentBackend.swift in Sources */ = {isa = PBXBuildFile; fileRef = A47193206AC87D847FBE0464 /* CodingAgentBackend.swift */; };
 		8C8F4CEF9CECEAE441078C65 /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3A7EBAEB8A9F84547ED0E2C /* ChatView.swift */; };
 		8CA965B379BB44FECF9AC98C /* ReceivedAttachmentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9C1C28D18A18F2EF864AD56 /* ReceivedAttachmentView.swift */; };
 		8F64EB25775D2239FB3A01BB /* SessionModelPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C8ADDF94DDDFF9CE88126F0 /* SessionModelPicker.swift */; };
@@ -89,6 +92,7 @@
 		4EA22364603F42C736FC41B3 /* ReceivedAttachment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReceivedAttachment.swift; sourceTree = "<group>"; };
 		5236D692D2EABE6416E275AA /* AgentProfile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentProfile.swift; sourceTree = "<group>"; };
 		576E817E7F2EF6EBD3E0896C /* LocalMemory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalMemory.swift; sourceTree = "<group>"; };
+		5B8A80D16591DCF4C398C87D /* CodingProgressReporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodingProgressReporter.swift; sourceTree = "<group>"; };
 		5C8ADDF94DDDFF9CE88126F0 /* SessionModelPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionModelPicker.swift; sourceTree = "<group>"; };
 		623B08465663BD7645249282 /* HermesModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HermesModels.swift; sourceTree = "<group>"; };
 		6B62B1520960DBF0EB2897C3 /* ChatPhoto.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatPhoto.swift; sourceTree = "<group>"; };
@@ -100,6 +104,8 @@
 		980142E654C74325A9380E31 /* LunaHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LunaHomeView.swift; sourceTree = "<group>"; };
 		98A4E4C22825B026F4E93CD2 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
 		9FDE2C62DFC153BB6FD28977 /* OpenAILiveSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenAILiveSession.swift; sourceTree = "<group>"; };
+		A1390E41162708E73D07FA46 /* CodingAgentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodingAgentTests.swift; sourceTree = "<group>"; };
+		A47193206AC87D847FBE0464 /* CodingAgentBackend.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodingAgentBackend.swift; sourceTree = "<group>"; };
 		AF046A466A92E8ACD7BDDAF0 /* AttachmentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AttachmentTests.swift; sourceTree = "<group>"; };
 		B42DC2311D4BE8F5AFA81672 /* NoticeCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoticeCard.swift; sourceTree = "<group>"; };
 		BABAEBA38760C0ABFB68D8CD /* ChatPhotoControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatPhotoControls.swift; sourceTree = "<group>"; };
@@ -169,6 +175,8 @@
 				0959E3069C4093686B784253 /* AppStore.swift */,
 				3AA6044B370434508DB9A721 /* AutoModelRouter.swift */,
 				6B62B1520960DBF0EB2897C3 /* ChatPhoto.swift */,
+				A47193206AC87D847FBE0464 /* CodingAgentBackend.swift */,
+				5B8A80D16591DCF4C398C87D /* CodingProgressReporter.swift */,
 				7D003B67552AAA3BB9F8F809 /* DemoBackend.swift */,
 				95360DD900EF04092764F94B /* HermesClient.swift */,
 				623B08465663BD7645249282 /* HermesModels.swift */,
@@ -186,6 +194,7 @@
 			children = (
 				AF046A466A92E8ACD7BDDAF0 /* AttachmentTests.swift */,
 				73A13354741DF287DAE72D33 /* ChatViewportTests.swift */,
+				A1390E41162708E73D07FA46 /* CodingAgentTests.swift */,
 				BDF59CED60218ECEC6977138 /* LunaTests.swift */,
 				CAD6FE67F1EEF86E27824070 /* LunaTextRouterTests.swift */,
 				F43D3DE575F4C271CC601EDF /* MultiAgentTests.swift */,
@@ -335,6 +344,11 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					EDEBD772AE9343A01D9935A3 = {
+						DevelopmentTeam = ZBG2L2QMYG;
+					};
+				};
 			};
 			buildConfigurationList = 9C7285D4C14B8A8DF926CBB7 /* Build configuration list for PBXProject "Luna" */;
 			developmentRegion = en;
@@ -380,6 +394,7 @@
 			files = (
 				EA21E21C587025A8C3C3457A /* AttachmentTests.swift in Sources */,
 				391A80FC91E55B18EFBF2424 /* ChatViewportTests.swift in Sources */,
+				29A9DA131C4A6D3A00F2CFAA /* CodingAgentTests.swift in Sources */,
 				0BA4C4EF3498F60D61A34FE0 /* LunaTests.swift in Sources */,
 				5C14E830CC489AE7C2A9AEEF /* LunaTextRouterTests.swift in Sources */,
 				741130FDCBC245770ED2136D /* MultiAgentTests.swift in Sources */,
@@ -398,6 +413,8 @@
 				706B7C69FC62D19D069703F6 /* ChatPhoto.swift in Sources */,
 				1CAB49EBF924D4AEA7CA0B46 /* ChatPhotoControls.swift in Sources */,
 				8C8F4CEF9CECEAE441078C65 /* ChatView.swift in Sources */,
+				84E0EAB69F2E15161CC5CA04 /* CodingAgentBackend.swift in Sources */,
+				09C4F2D73A3CC8889ED7161A /* CodingProgressReporter.swift in Sources */,
 				94F577100A1F4DEF82D0F97B /* CompatibleAgentClient.swift in Sources */,
 				1F5EB897369B687077E805F9 /* DemoBackend.swift in Sources */,
 				4BB4083BDD63A29BB8CCE749 /* HermesClient.swift in Sources */,

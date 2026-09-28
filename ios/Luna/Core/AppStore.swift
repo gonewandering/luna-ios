@@ -52,6 +52,7 @@ import Observation
     private var modelPreferences: [String: SessionModelPreference] = [:]
     var sessionModels: [String: HermesModelSelection] { modelPreferences.compactMapValues(\.selection) }
     private(set) var changingModels: Set<String> = []
+    private(set) var codingSessions = CodingSessionRegistry()
     private(set) var supportsSessionModels = false
     @ObservationIgnored private(set) var backend: (any AgentBackend)?
     @ObservationIgnored private(set) var coordinator: RunCoordinator?
@@ -94,6 +95,8 @@ import Observation
             historyFetchedAt = saved.fetchedAt ?? [:]
         }
         modelPreferences = try SessionModelFile.read(SessionModelFile.location(for: cache))
+        // A damaged coding registry only costs session reuse, never a saved task.
+        codingSessions = (try? CodingSessionFile.read(CodingSessionFile.location(for: cache))) ?? CodingSessionRegistry()
     }
 
     func renameLocally(_ name: String) { profile?.name = name }
@@ -118,6 +121,7 @@ import Observation
         let current = generation
         connected = false
         modelCatalog = nil; supportsSessionModels = false; changingModels = []
+        codingSessions = CodingSessionRegistry()
         do {
             let next: any AgentBackend
             let file: URL
@@ -152,6 +156,7 @@ import Observation
             }
             cacheURL = file; backend = next
             modelPreferences = savedModels
+            codingSessions = (try? CodingSessionFile.read(CodingSessionFile.location(for: file))) ?? CodingSessionRegistry()
             supportsSessionModels = features["session_model_lock"]?.bool == true
             let listed = Set(page.sessions.map(\.id))
             sessions = page.sessions + sessions.filter { !listed.contains($0.id) }; sessionsHasMore = page.has_more
@@ -391,6 +396,91 @@ import Observation
         try ProtectedFile.write(next, to: SessionModelFile.location(for: file))
         modelPreferences = next
     }
+    // MARK: Coding work
+
+    /// Coding work runs in a Hermes coding-agent session rather than inline.
+    /// Claude, Grok and Codex are alternatives here: the caller may name one,
+    /// the agent's own last coding session is preferred next, and otherwise Luna
+    /// takes the first available. A session is reused when Hermes still has it.
+    func startCodingTask(id: String, prompt: String, backend requested: CodingAgentBackend? = nil) async throws -> CodingTaskStart {
+        guard connected, let remote = backend, let coordinator else { throw ServiceError(message: "Reconnect this agent before starting coding work.") }
+        guard profile?.kind != .openAICompatible else {
+            throw ServiceError(message: "Coding sessions need a Hermes agent. A generic OpenAI-compatible endpoint has no session or run API.")
+        }
+        let text = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { throw ServiceError(message: "Describe the coding work to delegate.") }
+        let catalog = try await loadedCatalog()
+        let remembered = requested == nil ? codingSessions.sessions.values.max(by: { $0.lastUsedAt < $1.lastUsedAt })?.backend : nil
+        let choice = try CodingAgentResolver.resolve(requested: requested, remembered: remembered, in: catalog)
+        let available = CodingAgentResolver.available(in: catalog)
+        let current = generation
+        let saved = codingSessions[choice.backend]
+        var reused = false
+        let sid: String
+        if let saved, let existing = try? await remote.session(saved.sessionID) {
+            guard generation == current, connected else { throw CancellationError() }
+            sid = existing.id; reused = true
+            if let index = sessions.firstIndex(where: { $0.id == sid }) { sessions[index] = existing }
+            else { sessions.insert(existing, at: 0) }
+        } else {
+            let created = try await remote.create(choice.backend.sessionTitle)
+            guard generation == current, connected else { throw CancellationError() }
+            sid = created.id
+            if !sessions.contains(where: { $0.id == sid }) { sessions.insert(created, at: 0) }
+        }
+        rememberCodingSession(choice, sessionID: sid, createdAt: reused ? saved?.createdAt : nil)
+        var lockNote: String?
+        if supportsSessionModels && sessionModels[sid] != choice.selection {
+            do { try await setSessionModel(choice.selection, sessionID: sid) }
+            catch is CancellationError { throw CancellationError() }
+            catch {
+                // Every Runs request still carries this model and provider, so an
+                // unconfirmed session lock does not change what executes.
+                lockNote = "Hermes did not confirm the session model: " + error.localizedDescription
+            }
+        }
+        guard generation == current, connected else { throw CancellationError() }
+        let run = try await coordinator.admit(id: id, sessionID: sid, text: text, model: choice.selection)
+        saveSoon()
+        return CodingTaskStart(run: run, choice: choice, sessionID: sid, reusedSession: reused,
+                               available: available, modelLockNote: lockNote)
+    }
+
+    private func rememberCodingSession(_ choice: CodingAgentChoice, sessionID sid: String, createdAt: Double?) {
+        let now = Date().timeIntervalSince1970
+        var next = codingSessions
+        next[choice.backend] = CodingSessionRecord(backend: choice.backend, sessionID: sid, selection: choice.selection,
+                                                   createdAt: createdAt ?? now, lastUsedAt: now)
+        codingSessions = next
+        guard let file = cacheURL else { return }
+        // Losing this file only costs reuse: the task itself is journaled at admission.
+        try? ProtectedFile.write(next, to: CodingSessionFile.location(for: file))
+    }
+
+    func codingAlternatives() async throws -> [CodingAgentBackend] {
+        CodingAgentResolver.available(in: try await loadedCatalog())
+    }
+
+    private func loadedCatalog() async throws -> HermesModelCatalog {
+        if let modelCatalog { return modelCatalog }
+        try await loadModels()
+        guard let catalog = modelCatalog else {
+            throw ServiceError(message: "Luna couldn't read this agent's model list. Refresh it and try again.")
+        }
+        return catalog
+    }
+
+    /// A local, read-only view of one delegated coding run for progress reports.
+    func codingSnapshot(_ id: String, backend: CodingAgentBackend) -> CodingProgressSnapshot? {
+        guard let run = runs[id] else { return nil }
+        let rows = (activity[run.sessionID] ?? []).filter { $0.runID == id }
+        return CodingProgressSnapshot(backend: backend, agentName: agentName, sessionID: run.sessionID,
+            sessionTitle: sessions.first { $0.id == run.sessionID }?.title ?? backend.sessionTitle,
+            requestID: id, status: run.status, statusLabel: run.statusLabel, error: run.error, output: run.output,
+            latestStep: (rows.last { !$0.finished } ?? rows.last)?.title, failedStep: rows.last { $0.failed }?.title,
+            approval: approvals.values.first { $0.runID == id }?.description, startedAt: run.created)
+    }
+
     private func checkModelReady(_ sid: String, requireAutoKey: Bool = true) throws {
         guard !changingModels.contains(sid) else { throw ServiceError(message: "Wait for the model selection to finish saving.") }
         guard !requireAutoKey || !usesAutoModel(sid) || demo || !openAIKey.isEmpty else {
@@ -504,6 +594,7 @@ import Observation
             drafts = [:]; photoDrafts = [:]
             notices.removeAll(); error = nil; reconnecting = false
             modelPreferences = [:]; modelCatalog = nil; changingModels = []; supportsSessionModels = false
+            codingSessions = CodingSessionRegistry()
         } catch { self.error = error.localizedDescription }
     }
     @discardableResult func saveNow() -> Bool {

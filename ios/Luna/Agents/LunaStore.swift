@@ -33,6 +33,10 @@ struct HomeSession: Identifiable {
     @ObservationIgnored private var backgrounded = false
     @ObservationIgnored var makeTextRouter: ((String) -> LunaTextRouter)?
     @ObservationIgnored private var textTask: Task<Void, Never>?
+    @ObservationIgnored private var codingReporters: [String: CodingProgressReporter] = [:]
+    @ObservationIgnored private var codingRuns: [String: CodingRunTag] = [:]
+    /// Roughly one minute. Tests shorten it; nothing else changes the cadence.
+    @ObservationIgnored var codingProgressInterval: TimeInterval = CodingProgressReporter.defaultInterval
     @ObservationIgnored private let backendFactory: ((AgentProfile, String) throws -> any AgentBackend)?
     @ObservationIgnored private let readKey: (String) -> String
     @ObservationIgnored private let writeKey: (String, String) throws -> Void
@@ -268,6 +272,7 @@ struct HomeSession: Identifiable {
         runtime.onRunFinished = { [weak self] run in
             guard let self else { return }
             syncMemory(profile.id)
+            finishCodingProgress(run)
             await voice.finished(run, agentID: profile.id, agentName: self.profiles.first(where: { $0.id == profile.id })?.name ?? profile.name)
         }
         runtimes[profile.id] = runtime
@@ -401,6 +406,38 @@ struct HomeSession: Identifiable {
             }
             if name == "send_prompt" { setVoiceTarget(address); open(address); runtime.saveNow() }
             return result.merging(["agent_id": .string(address.agentID), "session_id": .string(address.sessionID)]) { _, new in new }
+        case "list_coding_agents":
+            guard let agent = args["agent_id"]?.string else { throw ServiceError(message: "Choose an exact agent ID first.") }
+            let runtime = try runtime(agent)
+            guard runtime.connected else { throw ServiceError(message: "Reconnect that agent to read its coding agents.") }
+            let available = try await runtime.codingAlternatives()
+            return ["agent_id": .string(agent), "coding_agents": .array(available.map { .string($0.rawValue) }),
+                "note": .string(available.isEmpty ? "This agent has no authenticated Claude, Grok, or Codex provider in Hermes." : "Claude, Grok and Codex are alternatives. Name one only if the user did; otherwise let Luna choose from these.")]
+        case "start_coding_task":
+            guard let agent = args["agent_id"]?.string else { throw ServiceError(message: "Choose an exact agent ID first.") }
+            let runtime = try runtime(agent)
+            for (otherID, other) in runtimes where otherID != agent {
+                if other.coordinator?.records[id] != nil {
+                    throw ServiceError(message: "That request already belongs to a different agent.", statusCode: 409)
+                }
+            }
+            let requested = args["coding_agent"]?.string
+            guard requested == nil || CodingAgentBackend.named(requested) != nil else {
+                throw ServiceError(message: "Choose claude, grok, or codex, or leave it unset so Luna uses an available one.")
+            }
+            let started = try await runtime.startCodingTask(id: id, prompt: args["prompt"]?.string ?? "",
+                                                            backend: CodingAgentBackend.named(requested))
+            let address = SessionAddress(agentID: agent, sessionID: started.sessionID)
+            setVoiceTarget(address); open(address); runtime.saveNow(); syncMemory(agent)
+            beginCodingProgress(requestID: started.run.id, agentID: agent, backend: started.choice.backend)
+            var result: JSONObject = ["agent_id": .string(agent), "session_id": .string(started.sessionID),
+                "request_id": .string(started.run.id), "status": .string(started.run.status),
+                "coding_agent": .string(started.choice.backend.rawValue), "model": .string(started.choice.selection.model),
+                "provider": .string(started.choice.selection.provider), "reused_session": .bool(started.reusedSession),
+                "available_coding_agents": .array(started.available.map { .string($0.rawValue) }),
+                "note": .string("Accepted locally and running in this Hermes coding session. Luna shows the user a progress update about every minute; do not poll or resend.")]
+            if let lock = started.modelLockNote { result["model_lock_note"] = .string(lock) }
+            return result
         case "get_agent_tools", "get_agent_skills":
             guard let agent = args["agent_id"]?.string else { throw ServiceError(message: "Choose an exact agent ID first.") }
             let runtime = try runtime(agent)
@@ -409,6 +446,55 @@ struct HomeSession: Identifiable {
         default: throw ServiceError(message: "Unknown Luna voice command.")
         }
     }
+    struct CodingRunTag: Equatable, Sendable {
+        let agentID: String
+        let backend: CodingAgentBackend
+    }
+
+    /// Start reporting a delegated coding run to the user about every minute.
+    /// Reports read local state only; they never contact Hermes or resend work.
+    func beginCodingProgress(requestID: String, agentID: String, backend: CodingAgentBackend) {
+        codingRuns[requestID] = CodingRunTag(agentID: agentID, backend: backend)
+        guard codingReporters[requestID] == nil else { return }
+        let reporter = CodingProgressReporter(requestID: requestID, interval: codingProgressInterval,
+            read: { [weak self] in self?.runtimes[agentID]?.codingSnapshot(requestID, backend: backend) },
+            report: { [weak self] update in self?.deliverCodingProgress(update) })
+        codingReporters[requestID] = reporter
+        reporter.start()
+    }
+
+    func deliverCodingProgress(_ update: CodingProgressUpdate) {
+        let id = update.snapshot.requestID
+        lunaText.messages.append(ChatMessage(id: "coding-progress-\(id)-\(update.sequence)", role: "assistant",
+                                             content: update.message, createdAt: Date().timeIntervalSince1970))
+        lunaText.messages = Array(lunaText.messages.suffix(24))
+        lunaText.replyHidden = false
+        notices.show(TransientNotices.codingProgress(id), duration: 12)
+        Task { [weak self] in await self?.voice.progress(update) }
+        if update.isFinal { endCodingProgress(id) }
+    }
+
+    /// Report a finished coding run immediately instead of waiting for the tick.
+    func finishCodingProgress(_ run: AgentRun) {
+        guard let reporter = codingReporters[run.id] else { return }
+        reporter.finish()
+        endCodingProgress(run.id)
+    }
+    private func endCodingProgress(_ requestID: String) {
+        codingReporters.removeValue(forKey: requestID)?.stop()
+        codingRuns.removeValue(forKey: requestID)
+    }
+    private func pauseCodingProgress() {
+        for reporter in codingReporters.values { reporter.stop() }
+        codingReporters = [:]
+    }
+    private func resumeCodingProgress() {
+        for (requestID, tag) in codingRuns {
+            guard let run = runtimes[tag.agentID]?.runs[requestID], run.isActive else { codingRuns.removeValue(forKey: requestID); continue }
+            beginCodingProgress(requestID: requestID, agentID: tag.agentID, backend: tag.backend)
+        }
+    }
+
     private func runtime(_ id: String) throws -> AppStore {
         guard profiles.contains(where: { $0.id == id }), let runtime = runtimes[id] else { throw ServiceError(message: "Choose an exact agent ID from list_agents.") }
         return runtime
@@ -425,7 +511,8 @@ struct HomeSession: Identifiable {
     }
     func sceneChanged(background: Bool) async {
         backgrounded = background; notices.expire()
-        if background && !voice.isActive { textTask?.cancel() }
+        if background && !voice.isActive { textTask?.cancel(); pauseCodingProgress() }
+        if !background { resumeCodingProgress() }
         await withTaskGroup(of: Void.self) { group in
             for runtime in runtimes.values { group.addTask { await runtime.sceneChanged(background: background) } }
         }

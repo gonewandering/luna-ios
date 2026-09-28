@@ -8,6 +8,7 @@ import Observation
 
     static func run(_ id: String) -> String { "run:" + id }
     static func activity(_ sessionID: String) -> String { "activity:" + sessionID }
+    static func codingProgress(_ requestID: String) -> String { "coding:" + requestID }
 
     func contains(_ id: String) -> Bool { deadlines[id] != nil }
 
