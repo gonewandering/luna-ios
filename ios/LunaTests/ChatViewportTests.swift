@@ -77,7 +77,8 @@ final class ChatViewportTests: XCTestCase {
                           "Message composer did not return after voice stopped on \(name)")
         }
         store.navigation = [.agent(profile.id)]
-        store.lunaText.messages = [ChatMessage(id: "reply", role: "assistant", content: "I found two conversations about the dark interface. Which agent would you like to use?", createdAt: 1)]
+        try store.transcripts.upsert(TranscriptEntry(id: "reply", turnID: "t", address: nil, kind: .lunaToUser,
+            text: "I found two conversations about the dark interface. Which agent would you like to use?", createdAt: 1))
         store.lunaText.draft = "Use Research demo"
         try await Task.sleep(for: .milliseconds(400))
         let editor = try XCTUnwrap(textInputs(in: window).first { $0 is UITextView })

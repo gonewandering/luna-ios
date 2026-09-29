@@ -10,7 +10,7 @@ struct LunaComposer: View {
     var body: some View {
         if !store.voice.isActive {
             VStack(spacing: 10) {
-                if !conversation.messages.isEmpty, let showConversation {
+                if !store.lunaTimeline.isEmpty, let showConversation {
                     HStack {
                         Spacer()
                         Button(action: showConversation) { Image(systemName: "bubble.left.and.bubble.right") }
@@ -32,13 +32,13 @@ struct LunaTextPreview: View {
     @Bindable var store: LunaStore
     let showConversation: () -> Void
     var body: some View {
-        if store.lunaText.sending || (!store.lunaText.replyHidden && store.lunaText.latestReply != nil) {
+        if store.lunaText.sending || store.latestLunaReply != nil {
             HStack(alignment: .top, spacing: 12) {
                 Button(action: showConversation) {
                     VStack(alignment: .leading, spacing: 6) {
                         Text(store.lunaText.sending ? "Luna is thinking…" : "Luna").font(.caption.weight(.semibold)).foregroundStyle(Palette.forest)
-                        if !store.lunaText.sending, let reply = store.lunaText.latestReply {
-                            Text(reply.content).font(.callout).foregroundStyle(Palette.ink).lineLimit(4).multilineTextAlignment(.leading)
+                        if !store.lunaText.sending, let reply = store.latestLunaReply {
+                            Text(reply.text).font(.callout).foregroundStyle(Palette.ink).lineLimit(4).multilineTextAlignment(.leading)
                         }
                     }.frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
                 }.buttonStyle(.plain).accessibilityHint("Opens your conversation with Luna")
@@ -46,7 +46,7 @@ struct LunaTextPreview: View {
                     Button("Stop") { store.stopLunaText() }.font(.caption).padding(.vertical, 6)
                         .accessibilityLabel("Stop Luna's reply")
                 } else {
-                    Button { store.lunaText.replyHidden = true } label: {
+                    Button { store.lunaText.dismissedReplyID = store.latestLunaReply?.id } label: {
                         Image(systemName: "xmark").font(.caption.weight(.semibold)).frame(width: 28, height: 28)
                     }.accessibilityLabel("Dismiss Luna's reply")
                 }

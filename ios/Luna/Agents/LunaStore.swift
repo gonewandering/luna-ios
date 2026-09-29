@@ -15,7 +15,6 @@ struct HomeSession: Identifiable {
 @MainActor @Observable final class LunaStore {
     private(set) var profiles: [AgentProfile] = []
     private(set) var runtimes: [String: AppStore] = [:]
-    var memory: LocalMemory
     /// Durable, chronological transcript of every conversation leg. Falls back to
     /// an in-memory store if the database cannot be opened, so chat still works.
     let transcripts: TranscriptStore
@@ -49,8 +48,6 @@ struct HomeSession: Identifiable {
          readKey: @escaping (String) -> String = { Credentials.read($0) },
          writeKey: @escaping (String, String) throws -> Void = { try Credentials.save($0, account: $1) }) {
         self.root = root; self.backendFactory = backendFactory; self.readKey = readKey; self.writeKey = writeKey
-        do { memory = try LocalMemory(file: loadSavedState ? root.appending(path: "memory.json") : nil) }
-        catch { memory = try! LocalMemory(); storageError = "Luna could not read its local memory. Your saved file has been left intact." }
         do { transcripts = try TranscriptStore(file: root.appending(path: "transcript.sqlite")) }
         catch {
             transcripts = try! TranscriptStore(file: nil)
@@ -77,13 +74,10 @@ struct HomeSession: Identifiable {
                     }
                 }
                 for profile in profiles { try attach(profile, key: readKey(profile.keyAccount)) }
-                memory.retainAgents(Set(profiles.map(\.id)))
                 try transcripts.retainAgents(Set(profiles.map(\.id)))
             } catch { storageError = "Luna could not load its saved agents. Existing files have been left intact." }
         } else {
             // Tests and previews can still exercise durable local files in an isolated directory.
-            do { memory = try LocalMemory(file: root.appending(path: "memory.json")) }
-            catch { storageError = "Luna could not read local memory." }
         }
         voice.onStopped = { [weak self] in
             guard let self, backgrounded else { return }
@@ -124,11 +118,11 @@ struct HomeSession: Identifiable {
         guard prompt.count <= 32_000 else { error = "Please keep Luna’s message under 32,000 characters."; return }
         guard !openAIKey.isEmpty || makeTextRouter != nil else { error = "Add Luna’s OpenAI API key in Settings to send messages to Luna. You can still type directly in an agent’s chat."; return }
         if let agentID, !profiles.contains(where: { $0.id == agentID }) { error = "Choose an available agent."; return }
-        let history = lunaText.messages
+        // Luna's own conversation (what the user asked and what she answered),
+        // oldest first; session detail arrives separately as transcript context.
+        let history = lunaConversationHistory(limit: 24)
         let turnID = UUID().uuidString.lowercased()
-        lunaText.draft = ""; lunaText.sending = true; lunaText.replyHidden = false
-        lunaText.messages.append(ChatMessage(id: turnID, role: "user", content: prompt, createdAt: Date().timeIntervalSince1970))
-        lunaText.messages = Array(lunaText.messages.suffix(24))
+        lunaText.draft = ""; lunaText.sending = true
         recordUserTurn(turnID, text: prompt, source: .typed, address: bound ?? lunaText.destination.flatMap { session($0) != nil ? $0 : nil })
         var context: JSONObject = ["current_time": .number(Date().timeIntervalSince1970), "time_zone": .string(TimeZone.current.identifier),
                                   "browsing_agent_id": agentID.map(JSONValue.string) ?? .null]
@@ -155,8 +149,6 @@ struct HomeSession: Identifiable {
                     }
                     return result
                 }
-                lunaText.messages.append(ChatMessage(id: turnID + "-reply", role: "assistant", content: reply, createdAt: Date().timeIntervalSince1970))
-                lunaText.messages = Array(lunaText.messages.suffix(24))
                 recordLunaReply(turnID, text: reply, address: bound)
             } catch is CancellationError {
                 error = "Luna stopped. Any task already sent is still available in its conversation."
@@ -215,9 +207,6 @@ struct HomeSession: Identifiable {
         try ProtectedFile.write(AgentRegistry(agents: next), to: root.appending(path: "profiles.json"))
         profiles = next
         runtimes[id]?.renameLocally(clean)
-        memory.renameAgent(id, name: clean)
-        do { try memory.save() }
-        catch { self.error = "The agent’s name was saved, but Luna could not update its cached conversation labels." }
         return next[index]
     }
 
@@ -290,7 +279,6 @@ struct HomeSession: Identifiable {
             await runtimes[previous.id]?.disconnect()
             runtimes.removeValue(forKey: previous.id)
             if previous.id != profile.id {
-                try? memory.removeAgent(previous.id)
                 try? transcripts.removeAgent(previous.id)
                 try? removeLegacyCopy(previous)
                 try? writeKey("", previous.keyAccount)
@@ -313,7 +301,6 @@ struct HomeSession: Identifiable {
         await runtimes[id]?.disconnect()
         profiles = next; runtimes.removeValue(forKey: id); navigation = []
         if voiceTarget?.agentID == id { setVoiceTarget(nil) }
-        try memory.removeAgent(id)
         try transcripts.removeAgent(id)
         try removeLegacyCopy(profile)
         try writeKey("", profile.keyAccount)
@@ -361,8 +348,8 @@ struct HomeSession: Identifiable {
     /// per agent. Failure leaves the legacy files intact and is retried next launch.
     private func migrateTranscript(_ profile: AgentProfile) {
         let cache = CacheFile.read(AgentFiles.cache(profile.id, root: root))
-        let remembered = memory.sessions.values.filter { $0.address.agentID == profile.id }
-        do { try TranscriptMigration.run(profile: profile, cache: cache, memory: Array(remembered), into: transcripts) }
+        let remembered = LegacyMemory.sessions(at: root.appending(path: "memory.json")).filter { $0.address.agentID == profile.id }
+        do { try TranscriptMigration.run(profile: profile, cache: cache, memory: remembered, into: transcripts) }
         catch { if self.error == nil { self.error = "Luna couldn't import " + profile.name + "'s earlier conversations into its transcript." } }
     }
     private func removeLegacyCopy(_ profile: AgentProfile) throws {
@@ -375,14 +362,11 @@ struct HomeSession: Identifiable {
         }
         try writeKey("", legacyAccount)
     }
+    /// The transcript is written as events happen; this only commits any
+    /// staged streaming text so local reads and search see it.
     func syncMemory(_ id: String) {
-        guard let profile = profiles.first(where: { $0.id == id }), let runtime = runtimes[id] else { return }
-        for session in runtime.sessions {
-            memory.update(profile: profile, session: session, messages: runtime.messages[session.id],
-                          runs: runtime.runs.values.filter { $0.sessionID == session.id }, fetchedAt: runtime.historyFetchedAt[session.id])
-        }
-        do { try memory.save() }
-        catch { if self.error == nil { self.error = "Luna couldn't save its recent conversation memory. Check available storage." } }
+        do { try transcripts.flush() }
+        catch { if self.error == nil { self.error = "Luna couldn't save this conversation on the device. Check available storage." } }
     }
     func open(_ address: SessionAddress) {
         guard session(address) != nil else { error = "This saved conversation is no longer available."; return }
@@ -485,7 +469,6 @@ struct HomeSession: Identifiable {
             let (address, runtime) = try target(args)
             syncMemory(address.agentID)
             var context = sessionContext(address, entryLimit: 60, characterBudget: 16_000)
-                ?? memory.context(address)?.json
                 ?? ["entries": .array([]), "source": .string("local_transcript"), "note": .string("This session has no local transcript yet.")]
             if name == "get_response_details" {
                 context["runs"] = .array(runtime.runs.values.filter { $0.sessionID == address.sessionID }.sorted { $0.created > $1.created }.prefix(5).map {
@@ -512,7 +495,7 @@ struct HomeSession: Identifiable {
             await runtime.loadMessages(address.sessionID)
             syncMemory(address.agentID)
             return ["refreshed": .bool(runtime.historyFetchedAt[address.sessionID] != before),
-                    "context": .object(sessionContext(address, entryLimit: 60, characterBudget: 16_000) ?? memory.context(address)?.json ?? [:])]
+                    "context": .object(sessionContext(address, entryLimit: 60, characterBudget: 16_000) ?? [:])]
         case "send_prompt", "stop_agent":
             let (address, runtime) = try target(args)
             for (otherID, other) in runtimes {
@@ -593,6 +576,20 @@ struct HomeSession: Identifiable {
     }
 
     // MARK: Transcript capture
+
+    /// The latest reply from Luna, for the preview above the Home composer.
+    var latestLunaReply: TranscriptEntry? {
+        guard let reply = lunaTimeline.last(where: { $0.kind == .lunaToUser }), reply.id != lunaText.dismissedReplyID else { return nil }
+        return reply
+    }
+    /// User turns and Luna replies as chat messages for the text router.
+    func lunaConversationHistory(limit: Int) -> [ChatMessage] {
+        // Only turns Luna handled: a user row Luna recorded carries its turn's ID;
+        // prompts imported from agent history or run admission do not.
+        let rows = ((try? transcripts.lunaTimeline(limit: limit * 4)) ?? [])
+            .filter { ($0.kind == .userToLuna && $0.id == $0.turnID) || $0.kind == .lunaToUser }
+        return rows.suffix(limit).map { ChatMessage(id: $0.id, role: $0.kind == .userToLuna ? "user" : "assistant", content: $0.text, createdAt: $0.createdAt) }
+    }
 
     /// Everything Luna has been part of, across sessions, newest last: the
     /// Luna-only thread plus routed turns. Observes the store's revision.
@@ -676,10 +673,6 @@ struct HomeSession: Identifiable {
 
     func deliverCodingProgress(_ update: CodingProgressUpdate) {
         let id = update.snapshot.requestID
-        lunaText.messages.append(ChatMessage(id: "coding-progress-\(id)-\(update.sequence)", role: "assistant",
-                                             content: update.message, createdAt: Date().timeIntervalSince1970))
-        lunaText.messages = Array(lunaText.messages.suffix(24))
-        lunaText.replyHidden = false
         if let tag = codingRuns[id], let run = runtimes[tag.agentID]?.runs[id] {
             let entry = TranscriptEntry(id: "coding-progress-\(id)-\(update.sequence)", turnID: run.turnID ?? "run-" + id,
                                         address: SessionAddress(agentID: tag.agentID, sessionID: run.sessionID), kind: .lunaToUser,
@@ -734,7 +727,6 @@ struct HomeSession: Identifiable {
         await withTaskGroup(of: Void.self) { group in
             for runtime in runtimes.values { group.addTask { await runtime.sceneChanged(background: background) } }
         }
-        try? memory.save()
         if background { try? transcripts.flush() }
     }
     #if DEBUG && targetEnvironment(simulator)
@@ -783,7 +775,7 @@ struct HomeSession: Identifiable {
     func startDemo() async {
         demo = true; started = true
         for runtime in runtimes.values { await runtime.disconnect() }
-        profiles = []; runtimes = [:]; navigation = []; memory = try! LocalMemory()
+        profiles = []; runtimes = [:]; navigation = []
         for name in ["Hermes demo", "Research demo"] {
             let profile = AgentProfile(name: name, kind: .hermes, address: "https://demo.invalid")
             profiles.append(profile)

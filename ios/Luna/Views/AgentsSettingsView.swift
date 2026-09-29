@@ -31,11 +31,11 @@ struct AgentsSettingsView: View {
                         do { try store.saveVoiceKey(voiceKey); saved = true } catch { store.error = error.localizedDescription }
                     }.disabled(saved)
                 } header: { Text("Luna and Auto mode") } footer: {
-                    Text("Luna uses this key for voice, Home and agent-list messages, and Auto model selection. Direct text in a session uses that agent’s connection. Changes apply to Luna’s next text request or voice connection.")
+                    Text("Luna uses this key for voice, every typed message (including in a session’s chat), summaries of agent answers, and Auto model selection. Changes apply to Luna’s next text request or voice connection.")
                 }.listRowBackground(Palette.card)
                 Section {
-                    LabeledContent("Remembered sessions", value: String(store.memory.sessions.count))
-                    Text("Luna keeps the latest 12 messages per session, organized by time. You can search them even when an agent is offline. Luna’s voice and text requests send retrieved context to OpenAI.")
+                    LabeledContent("Saved conversations", value: String(store.profiles.reduce(0) { $0 + ((try? store.transcripts.sessionIDs(agentID: $1.id))?.count ?? 0) }))
+                    Text("Every conversation is kept on this phone in order: what you said, what Luna sent, the agent’s work and answers, and Luna’s replies. Nothing is pruned. You can search it even when an agent is offline. Luna’s voice and text requests send recent context to OpenAI.")
                         .font(.caption).foregroundStyle(Palette.muted)
                     Text("Keys stay in this device’s Keychain. Conversation memory is protected on this device. No Luna helper is required.")
                         .font(.caption).foregroundStyle(Palette.muted)

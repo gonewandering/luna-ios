@@ -498,11 +498,18 @@ import Observation
     /// A local, read-only view of one delegated coding run for progress reports.
     func codingSnapshot(_ id: String, backend: CodingAgentBackend) -> CodingProgressSnapshot? {
         guard let run = runs[id] else { return nil }
-        let rows = (activity[run.sessionID] ?? []).filter { $0.runID == id }
+        // Steps come from the durable transcript when there is one, so progress
+        // survives relaunches; the in-memory activity list is the legacy path.
+        let steps: [(title: String, finished: Bool, failed: Bool)]
+        if let recorder, let tools = try? recorder.store.entries(run: id).filter({ $0.kind == .agentTool }), !tools.isEmpty {
+            steps = tools.map { ($0.tool?.name ?? "Tool", $0.tool?.status != "running", $0.tool?.status == "failed") }
+        } else {
+            steps = (activity[run.sessionID] ?? []).filter { $0.runID == id }.map { ($0.title, $0.finished, $0.failed) }
+        }
         return CodingProgressSnapshot(backend: backend, agentName: agentName, sessionID: run.sessionID,
             sessionTitle: sessions.first { $0.id == run.sessionID }?.title ?? backend.sessionTitle,
             requestID: id, status: run.status, statusLabel: run.statusLabel, error: run.error, output: run.output,
-            latestStep: (rows.last { !$0.finished } ?? rows.last)?.title, failedStep: rows.last { $0.failed }?.title,
+            latestStep: (steps.last { !$0.finished } ?? steps.last)?.title, failedStep: steps.last { $0.failed }?.title,
             approval: approvals.values.first { $0.runID == id }?.description, startedAt: run.created)
     }
 

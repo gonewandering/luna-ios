@@ -218,10 +218,11 @@ final class CodingAgentTests: XCTestCase {
         let agent = try await store.saveAgent(AgentProfile(name: "Jetson", kind: .hermes, address: "https://a.example"), key: "a-key")
         _ = try await store.executeVoice("start_coding_task",
             arguments: ["agent_id": .string(agent.id), "prompt": .string("Add a retry")], id: "code-1")
-        await spin { store.lunaText.messages.filter { $0.id.hasPrefix("coding-progress-code-1-") }.count >= 2 }
-        let reports = store.lunaText.messages.filter { $0.id.hasPrefix("coding-progress-code-1-") }
-        XCTAssertTrue(reports.allSatisfy { $0.role == "assistant" })
-        XCTAssertTrue(reports[0].content.contains("Grok"), reports[0].content)
+        func reports() -> [TranscriptEntry] { ((try? store.transcripts.entries(run: "code-1")) ?? []).filter { $0.id.hasPrefix("coding-progress-code-1-") } }
+        await spin { reports().count >= 2 }
+        let reports = reports()
+        XCTAssertTrue(reports.allSatisfy { $0.kind == .lunaToUser && $0.address?.agentID == agent.id }, "progress lands in the coding session's timeline")
+        XCTAssertTrue(reports[0].text.contains("Grok"), reports[0].text)
         XCTAssertEqual(reports[0].id, "coding-progress-code-1-1")
         XCTAssertEqual(reports[1].id, "coding-progress-code-1-2")
         for runtime in store.runtimes.values { await runtime.disconnect() }

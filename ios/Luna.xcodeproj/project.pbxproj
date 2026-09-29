@@ -49,13 +49,13 @@
 		A3E15A972730BFC3E3923350 /* Textual in Frameworks */ = {isa = PBXBuildFile; productRef = C5BAB4A111E7FCA0123B843F /* Textual */; };
 		AA5D77885524AD875C0254FA /* VoiceController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19D248F43E5EB228FC27AD99 /* VoiceController.swift */; };
 		B344D5703307877B5D17009F /* WebRTC in Frameworks */ = {isa = PBXBuildFile; productRef = 326B425362EA8C9CF322D356 /* WebRTC */; };
-		B670671C4B2202D5731E8618 /* LocalMemory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 576E817E7F2EF6EBD3E0896C /* LocalMemory.swift */; };
 		BB29AF299B28CDCC199D1D78 /* AgentProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5236D692D2EABE6416E275AA /* AgentProfile.swift */; };
 		BE228A7A4E87EC49C5D7467A /* Transcript.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54D2E5407D725E944A5D8983 /* Transcript.swift */; };
 		C9679524C5D01422C4D71C20 /* RunCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = E81F3F231CEEBA56E46D061F /* RunCoordinator.swift */; };
 		D0E4B53C191D3F2078DCB4D8 /* TransientNotices.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5AFDF72DEE4AD51379C4317 /* TransientNotices.swift */; };
 		D2B8E3D89720D284733EF140 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA21F9D657ACA2D410DE710F /* Theme.swift */; };
 		DCF902F08F9196B8D84C70F6 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98A4E4C22825B026F4E93CD2 /* Models.swift */; };
+		DF8A7D111F61C5A5F7558C09 /* LegacyMemory.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC1200E57BA05D6CE48AAE49 /* LegacyMemory.swift */; };
 		E0FBB3F6F043F32EA09C1436 /* LunaApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16F06C8FB598F034AF50D6DC /* LunaApp.swift */; };
 		E830CA43D60ED63989E0A0C6 /* SessionComposerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43A16F7C4BA8548971E3BBE6 /* SessionComposerTests.swift */; };
 		EA21E21C587025A8C3C3457A /* AttachmentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF046A466A92E8ACD7BDDAF0 /* AttachmentTests.swift */; };
@@ -112,7 +112,6 @@
 		4EA22364603F42C736FC41B3 /* ReceivedAttachment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReceivedAttachment.swift; sourceTree = "<group>"; };
 		5236D692D2EABE6416E275AA /* AgentProfile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentProfile.swift; sourceTree = "<group>"; };
 		54D2E5407D725E944A5D8983 /* Transcript.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Transcript.swift; sourceTree = "<group>"; };
-		576E817E7F2EF6EBD3E0896C /* LocalMemory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalMemory.swift; sourceTree = "<group>"; };
 		5A33B2EB2B0530A03501DBD6 /* ToolWork.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToolWork.swift; sourceTree = "<group>"; };
 		5B8A80D16591DCF4C398C87D /* CodingProgressReporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodingProgressReporter.swift; sourceTree = "<group>"; };
 		5C8ADDF94DDDFF9CE88126F0 /* SessionModelPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionModelPicker.swift; sourceTree = "<group>"; };
@@ -141,6 +140,7 @@
 		CAD6FE67F1EEF86E27824070 /* LunaTextRouterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LunaTextRouterTests.swift; sourceTree = "<group>"; };
 		CB0008ECFC7D0FA5A4299AA9 /* LunaComposer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LunaComposer.swift; sourceTree = "<group>"; };
 		CB729E04C69366A09137F1C9 /* TranscriptStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptStoreTests.swift; sourceTree = "<group>"; };
+		CC1200E57BA05D6CE48AAE49 /* LegacyMemory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegacyMemory.swift; sourceTree = "<group>"; };
 		D399E4DA6B951325F78CD25C /* Luna.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Luna.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		D3A7EBAEB8A9F84547ED0E2C /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
 		D9C1C28D18A18F2EF864AD56 /* ReceivedAttachmentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReceivedAttachmentView.swift; sourceTree = "<group>"; };
@@ -244,7 +244,7 @@
 			children = (
 				5236D692D2EABE6416E275AA /* AgentProfile.swift */,
 				443952BAE69995706818E4F6 /* CompatibleAgentClient.swift */,
-				576E817E7F2EF6EBD3E0896C /* LocalMemory.swift */,
+				CC1200E57BA05D6CE48AAE49 /* LegacyMemory.swift */,
 				DFDC69E0DD3B2E98DCD51B29 /* LunaStore.swift */,
 				48182F45BCE1C3A1B0919F6F /* LunaTextRouter.swift */,
 			);
@@ -465,7 +465,7 @@
 				1F5EB897369B687077E805F9 /* DemoBackend.swift in Sources */,
 				4BB4083BDD63A29BB8CCE749 /* HermesClient.swift in Sources */,
 				999B508CD46D2B9E2D068CBD /* HermesModels.swift in Sources */,
-				B670671C4B2202D5731E8618 /* LocalMemory.swift in Sources */,
+				DF8A7D111F61C5A5F7558C09 /* LegacyMemory.swift in Sources */,
 				E0FBB3F6F043F32EA09C1436 /* LunaApp.swift in Sources */,
 				4A2B026D05766B96F53186D4 /* LunaComposer.swift in Sources */,
 				4BE22B628138E20C40C263C5 /* LunaHomeView.swift in Sources */,

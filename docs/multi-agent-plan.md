@@ -2,7 +2,7 @@
 
 ## Intended behavior
 
-Luna owns a protected, searchable memory of the latest 12 user/assistant messages per known session. Entries carry an agent ID, session ID, message time, freshness information, and truncation/partial-output flags. The local search/context tools never call an external agent. Voice still requires an OpenAI connection to understand speech; retrieved context is supplied to that voice conversation.
+Luna owns a protected, searchable, complete transcript of every conversation (see `chat-message-flow-plan.md`; this replaced the original 12-message-per-session memory). Entries carry an agent ID, session ID, time, and kind. The local search/context tools never call an external agent. Voice still requires an OpenAI connection to understand speech; retrieved context is supplied to that voice conversation.
 
 Settings manages named Hermes and OpenAI-compatible connections. Each has its own Keychain credential, cache, model preferences, backend, and durable request queue. The existing Hermes connection migrates once, retaining its sessions, preferences, and pending work. Connection failures remain isolated. The home screen uses AGENTS and SESSIONS section labels, with plain named agent rows above five recent conversations across configured agents, including visibly cached sessions when an agent is offline. Each agent opens its full session list.
 

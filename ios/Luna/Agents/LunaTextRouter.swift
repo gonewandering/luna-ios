@@ -4,11 +4,10 @@ import CryptoKit
 
 @MainActor @Observable final class LunaTextConversation {
     var draft = ""
-    var messages: [ChatMessage] = []
     var sending = false
-    var replyHidden = false
+    /// The newest Luna reply the user has dismissed from the preview.
+    var dismissedReplyID: String?
     var destination: SessionAddress?
-    var latestReply: ChatMessage? { messages.last?.role == "assistant" ? messages.last : nil }
 }
 
 /// Text uses the same native tools and destination validation as global voice.

@@ -91,7 +91,7 @@ final class LunaTextRouterTests: XCTestCase {
         store.lunaText.draft = "Find my research session"
         store.sendLunaText()
         XCTAssertEqual(store.lunaText.draft, "Find my research session")
-        XCTAssertTrue(store.lunaText.messages.isEmpty); XCTAssertFalse(store.lunaText.sending)
+        XCTAssertTrue(store.lunaTimeline.isEmpty); XCTAssertFalse(store.lunaText.sending)
         XCTAssertTrue(store.error?.contains("OpenAI API key") == true); XCTAssertFalse(store.voice.isActive)
     }
 
@@ -112,7 +112,7 @@ final class LunaTextRouterTests: XCTestCase {
         store.sendLunaText(agentID: first.id); store.sendLunaText(agentID: first.id)
         await settle(store)
         XCTAssertEqual(requests, 1)
-        XCTAssertEqual(store.lunaText.messages.count, 2)
+        XCTAssertEqual(store.lunaConversationHistory(limit: 24).map(\.role), ["user", "assistant"])
         XCTAssertTrue(store.runtimes.values.allSatisfy { $0.runs.isEmpty })
         XCTAssertTrue(store.navigation.isEmpty)
 
@@ -131,7 +131,7 @@ final class LunaTextRouterTests: XCTestCase {
         await settle(store)
         let target = SessionAddress(agentID: second.id, sessionID: "demo-design")
         XCTAssertNil(store.error); XCTAssertEqual(store.lunaText.destination, target)
-        XCTAssertEqual(store.navigation.last, .session(target)); XCTAssertEqual(store.lunaText.messages.count, 4)
+        XCTAssertEqual(store.navigation.last, .session(target)); XCTAssertEqual(store.lunaConversationHistory(limit: 24).map(\.role), ["user", "assistant", "user", "assistant"])
         XCTAssertEqual(store.runtimes[second.id]?.runs.values.first?.text, "Keep the dark interface")
         XCTAssertEqual(store.runtimes[second.id]?.runs.count, 1); XCTAssertTrue(store.runtimes[first.id]?.runs.isEmpty == true)
         XCTAssertFalse(store.voice.isActive)
@@ -150,7 +150,7 @@ final class LunaTextRouterTests: XCTestCase {
         for _ in 0..<100 { if started { break }; try await Task.sleep(for: .milliseconds(5)) }
         await store.sceneChanged(background: true)
         await settle(store)
-        XCTAssertNil(store.lunaText.latestReply)
+        XCTAssertNil(store.latestLunaReply)
         XCTAssertTrue(store.error?.contains("Luna stopped") == true)
     }
 
