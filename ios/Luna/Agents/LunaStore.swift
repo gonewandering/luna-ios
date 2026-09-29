@@ -340,12 +340,7 @@ struct HomeSession: Identifiable {
         voiceTarget = address
         voice.agentID = address?.agentID; voice.sessionID = address?.sessionID
         if voice.isActive, changed {
-            var extra: JSONObject = [:]
-            if let address {
-                if let profile = profiles.first(where: { $0.id == address.agentID }) { extra["agent_name"] = .string(profile.name) }
-                if let title = session(address)?.title { extra["session_title"] = .string(title) }
-                if let history = sessionContext(address, entryLimit: 20, characterBudget: 5_000) { extra["session_transcript"] = .object(history) }
-            }
+            let extra = address.map { destinationContext($0, entryLimit: 20, characterBudget: 5_000) } ?? [:]
             Task { await voice.updateDestination(address, extra: extra) }
         }
     }
@@ -358,13 +353,7 @@ struct HomeSession: Identifiable {
         guard !openAIKey.isEmpty else { error = "Add Luna’s OpenAI API key in Settings to use voice."; return }
         setVoiceTarget(target); transcript = ""
         voice.onTurn = { [weak self] turn in self?.recordSpokenTurn(turn) }
-        var context: JSONObject = ["current_time": .number(Date().timeIntervalSince1970), "time_zone": .string(TimeZone.current.identifier)]
-        if let target {
-            context["agent_id"] = .string(target.agentID); context["session_id"] = .string(target.sessionID)
-            if let profile = profiles.first(where: { $0.id == target.agentID }) { context["agent_name"] = .string(profile.name) }
-            if let title = session(target)?.title { context["session_title"] = .string(title) }
-            if let history = sessionContext(target, entryLimit: 30, characterBudget: 8_000) { context["session_transcript"] = .object(history) }
-        }
+        let context = voiceStartContext(target)
         do {
             try await voice.start(key: openAIKey, sessionID: "luna-home", title: "Luna", global: true,
                 initialContext: context,
@@ -516,6 +505,25 @@ struct HomeSession: Identifiable {
         default: throw ServiceError(message: "Unknown Luna voice command.")
         }
     }
+    /// What Luna knows when voice starts: time, and for a chosen session its
+    /// IDs, agent name, title and recent on-device transcript.
+    func voiceStartContext(_ target: SessionAddress?) -> JSONObject {
+        var context: JSONObject = ["current_time": .number(Date().timeIntervalSince1970), "time_zone": .string(TimeZone.current.identifier)]
+        if let target {
+            context["agent_id"] = .string(target.agentID); context["session_id"] = .string(target.sessionID)
+            context.merge(destinationContext(target, entryLimit: 30, characterBudget: 8_000)) { _, new in new }
+        }
+        return context
+    }
+    /// Agent name, session title and bounded transcript for one destination.
+    func destinationContext(_ address: SessionAddress, entryLimit: Int, characterBudget: Int) -> JSONObject {
+        var context: JSONObject = [:]
+        if let profile = profiles.first(where: { $0.id == address.agentID }) { context["agent_name"] = .string(profile.name) }
+        if let title = session(address)?.title { context["session_title"] = .string(title) }
+        if let history = sessionContext(address, entryLimit: entryLimit, characterBudget: characterBudget) { context["session_transcript"] = .object(history) }
+        return context
+    }
+
     /// The on-device transcript for a session as untrusted data for Luna:
     /// agent and session names and IDs plus recent entries within a budget.
     func sessionContext(_ address: SessionAddress, entryLimit: Int = 40, characterBudget: Int = 12_000) -> JSONObject? {
