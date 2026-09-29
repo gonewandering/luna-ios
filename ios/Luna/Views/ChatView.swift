@@ -94,8 +94,12 @@ struct ChatView: View {
             // Screenshot aid: --scroll-to <entry id> positions a row at the top.
             guard TranscriptDebug.expandAll, let index = ProcessInfo.processInfo.arguments.firstIndex(of: "--scroll-to"),
                   index + 1 < ProcessInfo.processInfo.arguments.count else { return }
-            try? await Task.sleep(for: .seconds(2))
-            scrollPosition.scrollTo(id: ProcessInfo.processInfo.arguments[index + 1], anchor: .top)
+            for _ in 0..<5 {
+                try? await Task.sleep(for: .seconds(3))
+                let target = ProcessInfo.processInfo.arguments[index + 1]
+                if target == "bottom" { scrollPosition.scrollTo(edge: .bottom) }
+                else { scrollPosition.scrollTo(id: target, anchor: .top) }
+            }
         }
         .task(id: bottomScrollRequest) {
             guard bottomScrollRequest > 0, !TranscriptDebug.expandAll else { return }

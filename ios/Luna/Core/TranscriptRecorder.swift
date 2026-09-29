@@ -57,7 +57,7 @@ import Foundation
     /// events close the most recent open row with the same title.
     func record(event: HermesEvent, runID: String, sessionID: String) {
         guard event.type.hasPrefix("tool.") || event.type.hasPrefix("subagent.") else { return }
-        let title = event.data["tool"]?.string ?? event.data["name"]?.string ?? "Agent tool"
+        let title = event.data["tool"]?.string ?? event.data["tool_name"]?.string ?? event.data["name"]?.string ?? "Agent tool"
         let preview = event.data["preview"]?.string ?? ""
         let finished = !event.type.hasSuffix("started")
         let failed = event.type.hasSuffix("failed") || event.data["error"]?.bool == true

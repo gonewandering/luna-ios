@@ -116,8 +116,9 @@ import Observation
     func progress(_ update: CodingProgressUpdate) async {
         await live?.progress(update)
     }
-    func updateDestination(_ address: SessionAddress?) async {
+    func updateDestination(_ address: SessionAddress?, extra: JSONObject = [:]) async {
         var context = address.map { ["agent_id": JSONValue.string($0.agentID), "session_id": .string($0.sessionID)] } ?? [:]
+        for (key, value) in extra { context[key] = value }
         context["current_time"] = .number(Date().timeIntervalSince1970)
         context["time_zone"] = .string(TimeZone.current.identifier)
         await live?.updateDestination(context)

@@ -70,9 +70,17 @@ extension AgentBackend { func shutdown() async {} }
             guard ["user", "assistant", "tool"].contains(role) else { return nil }
             let messageID = row["id"]?.string ?? row["id"]?.number.map { String(Int($0)) } ?? "history-\(offset + index)"
             let photos = ChatPhoto.fromHistory(row["content"], scope: photoScope)
-            return ChatMessage(id: messageID, role: role, content: Self.content(row["content"]),
+            let calls = Self.toolCalls(row["tool_calls"])
+            let content = Self.content(row["content"])
+            // An assistant turn that only called tools has no text to show.
+            if role == "assistant", content.isEmpty, !calls.isEmpty, photos.isEmpty {
+                return ChatMessage(id: messageID, role: "tool_calls", content: "", createdAt: Self.timestamp(row["timestamp"] ?? row["created_at"]),
+                                   toolName: nil, toolCalls: calls)
+            }
+            return ChatMessage(id: messageID, role: role, content: content,
                                createdAt: Self.timestamp(row["timestamp"] ?? row["created_at"]), toolName: row["tool_name"]?.string,
-                               photos: photos.isEmpty ? nil : photos)
+                               photos: photos.isEmpty ? nil : photos, toolCallID: row["tool_call_id"]?.string,
+                               toolCalls: calls.isEmpty ? nil : calls)
         }
         return HistoryPage(messages: messages, hasMore: value["has_more"]?.bool ?? (raw.count == 100), resolvedSessionID: value["session_id"]?.string ?? id)
     }
@@ -169,6 +177,19 @@ extension AgentBackend { func shutdown() async {} }
         return AgentSession(id: id, title: row["title"]?.string ?? "Untitled session", preview: row["preview"]?.string ?? "",
                             source: row["source"]?.string ?? "Hermes", updatedAt: timestamp(row["last_active"] ?? row["started_at"]),
                             messageCount: Int(row["message_count"]?.number ?? 0), model: row["model"]?.string)
+    }
+    /// Hermes stores OpenAI-shaped calls; arguments are a JSON string.
+    static func toolCalls(_ value: JSONValue?) -> [ToolCallRequest] {
+        var array = value?.array
+        if array == nil, let text = value?.string, let parsed = try? JSONDecoder().decode(JSONValue.self, from: Data(text.utf8)) { array = parsed.array }
+        return (array ?? []).compactMap(\.object).compactMap { call in
+            let function = call["function"]?.object
+            guard let name = function?["name"]?.string ?? call["name"]?.string else { return nil }
+            let id = call["id"]?.string ?? call["call_id"]?.string ?? UUID().uuidString
+            let arguments = function?["arguments"]?.string ?? call["arguments"]?.string
+                ?? (function?["arguments"]).flatMap { try? String(decoding: JSONEncoder().encode($0), as: UTF8.self) } ?? ""
+            return ToolCallRequest(id: id, name: name, arguments: arguments)
+        }
     }
     static func timestamp(_ value: JSONValue?) -> Double {
         if let number = value?.number ?? value?.string.flatMap(Double.init) {

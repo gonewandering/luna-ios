@@ -69,19 +69,19 @@ final class TranscriptCaptureTests: XCTestCase {
         ]
         recorder.reconcile(history, sessionID: "s1", fallbackTime: 40)
         let rows = try store.entries(address)
-        XCTAssertEqual(rows.map(\.id), ["h0", "h0a", "r1-prompt", "r1-tool-1", "r1-output", "h4"])
+        XCTAssertEqual(rows.map(\.shortID), ["h0", "h0a", "r1-prompt", "r1-tool-1", "r1-output", "h4"])
         XCTAssertEqual(rows.map(\.kind), [.userToLuna, .agentFinal, .lunaToAgent, .agentTool, .agentFinal, .userToLuna])
         XCTAssertEqual(try store.entry("r1-prompt")?.historyID, "h1")
         XCTAssertEqual(try store.entry("r1-output")?.historyID, "h3")
         XCTAssertEqual(try store.entry("r1-tool-1")?.tool?.result, "file.txt\nother.txt", "the server's full tool result replaces the preview")
-        XCTAssertEqual(try store.entry("h0a")?.createdAt, 50, "a missing timestamp follows the previous row")
-        XCTAssertEqual(try store.entry("h0a")?.turnID, "history-h0")
-        XCTAssertEqual(try store.entry("h4")?.historyID, "h4", "a second identical prompt is a new row, not a re-match")
+        XCTAssertEqual(try store.entry(TranscriptEntry.historyEntryID(address, "h0a"))?.createdAt, 50, "a missing timestamp follows the previous row")
+        XCTAssertEqual(try store.entry(TranscriptEntry.historyEntryID(address, "h0a"))?.turnID, "history-h0")
+        XCTAssertEqual(try store.entry(TranscriptEntry.historyEntryID(address, "h4"))?.historyID, "h4", "a second identical prompt is a new row, not a re-match")
         // Re-running the same page changes nothing.
         let revision = store.revision
         recorder.reconcile(history, sessionID: "s1", fallbackTime: 40)
         XCTAssertEqual(store.revision, revision)
-        XCTAssertEqual(try store.entries(address).map(\.id), ["h0", "h0a", "r1-prompt", "r1-tool-1", "r1-output", "h4"])
+        XCTAssertEqual(try store.entries(address).map(\.shortID), ["h0", "h0a", "r1-prompt", "r1-tool-1", "r1-output", "h4"])
     }
 
     @MainActor func testReconciliationKeepsTurnOrderWhenServerClockIsLater() throws {
@@ -167,4 +167,9 @@ final class TranscriptCaptureTests: XCTestCase {
         try! FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         return root
     }
+}
+
+extension TranscriptEntry {
+    /// Test shorthand: the server message ID when this row came from history, else the local ID.
+    var shortID: String { historyID.map { id.hasPrefix("h:") ? $0 : id } ?? id }
 }

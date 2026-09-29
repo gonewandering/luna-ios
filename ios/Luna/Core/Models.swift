@@ -21,10 +21,20 @@ struct ChatMessage: Codable, Identifiable, Equatable, Sendable {
     var createdAt: Double
     var toolName: String?
     var photos: [ChatPhoto]? = nil
+    /// Tool results: the call they answer. Assistant turns: the calls they made.
+    var toolCallID: String? = nil
+    var toolCalls: [ToolCallRequest]? = nil
     enum CodingKeys: String, CodingKey {
         case id, role, content, photos
-        case createdAt = "created_at", toolName = "tool_name"
+        case createdAt = "created_at", toolName = "tool_name", toolCallID = "tool_call_id", toolCalls = "tool_calls"
     }
+}
+
+/// One function call an assistant turn requested, as Hermes stores it.
+struct ToolCallRequest: Codable, Equatable, Sendable {
+    let id: String
+    let name: String
+    let arguments: String
 }
 
 enum ConversationHistory {

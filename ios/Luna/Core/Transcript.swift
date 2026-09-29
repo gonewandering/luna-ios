@@ -40,6 +40,13 @@ struct TranscriptEntry: Codable, Identifiable, Equatable, Sendable {
     /// preserved across streaming updates so a row never moves.
     var seq: Int = 0
 
+    /// Row ID for a message imported from agent history. Server message IDs are
+    /// only unique within one agent (often within one session), so they are
+    /// scoped; `historyID` keeps the raw ID for matching.
+    static func historyEntryID(_ address: SessionAddress, _ messageID: String) -> String {
+        "h:" + address.agentID + ":" + address.sessionID + ":" + messageID
+    }
+
     /// The same entry stamped with a different time (`createdAt` is otherwise immutable).
     func retimed(_ time: Double) -> TranscriptEntry {
         var copy = TranscriptEntry(id: id, turnID: turnID, address: address, kind: kind, source: source, text: text, tool: tool, runID: runID,
@@ -485,15 +492,15 @@ enum TranscriptMigration {
                     lastTurn = "legacy-" + message.id
                     let run = runs.first { $0.sessionID == sid && $0.text == message.content && !matchedRuns.contains($0.id) }
                     if let run { matchedRuns.insert(run.id) }
-                    add(TranscriptEntry(id: message.id, turnID: lastTurn, address: address, kind: .userToLuna, source: .typed, text: message.content,
+                    add(TranscriptEntry(id: TranscriptEntry.historyEntryID(address, message.id), turnID: lastTurn, address: address, kind: .userToLuna, source: .typed, text: message.content,
                                         runID: run?.id, upstreamID: run?.upstreamID, agentName: profile.name, photos: message.photos,
                                         historyID: message.id, createdAt: time))
                 case "tool":
-                    add(TranscriptEntry(id: message.id, turnID: lastTurn, address: address, kind: .agentTool, text: "",
+                    add(TranscriptEntry(id: TranscriptEntry.historyEntryID(address, message.id), turnID: lastTurn, address: address, kind: .agentTool, text: "",
                                         tool: .init(name: message.toolName ?? "Tool", result: message.content), agentName: profile.name,
                                         historyID: message.id, createdAt: time))
                 default:
-                    add(TranscriptEntry(id: message.id, turnID: lastTurn, address: address, kind: .agentFinal, text: message.content,
+                    add(TranscriptEntry(id: TranscriptEntry.historyEntryID(address, message.id), turnID: lastTurn, address: address, kind: .agentFinal, text: message.content,
                                         agentName: profile.name, photos: message.photos, historyID: message.id, createdAt: time))
                 }
             }
@@ -510,9 +517,9 @@ enum TranscriptMigration {
             }
             for session in memory where session.address == address {
                 for message in session.messages {
-                    add(TranscriptEntry(id: message.id, turnID: "legacy-" + sid, address: address,
+                    add(TranscriptEntry(id: TranscriptEntry.historyEntryID(address, message.id), turnID: "legacy-" + sid, address: address,
                                         kind: message.role == "user" ? .userToLuna : .agentFinal, source: message.role == "user" ? .typed : nil,
-                                        text: message.content, agentName: session.agentName,
+                                        text: message.content, agentName: session.agentName, historyID: message.id,
                                         status: message.partial ? .partial : .final, createdAt: message.createdAt))
                 }
             }
@@ -531,11 +538,14 @@ enum TranscriptReconciliation {
     /// unmatched history becomes new rows keyed by the server message ID.
     static func merge(history: [ChatMessage], into existing: [TranscriptEntry], address: SessionAddress, agentName: String,
                       fallbackTime: Double) -> [TranscriptEntry] {
-        var known = Set(existing.map(\.id)).union(existing.compactMap(\.historyID))
+        var known = Set(existing.compactMap(\.historyID))
         var candidates = existing.filter { $0.historyID == nil }
         var updates: [TranscriptEntry] = []
         var turn = "history-" + address.sessionID
         var lastTime = fallbackTime
+        // Tool results carry only output; their arguments live on the calling turn.
+        var callArguments: [String: String] = [:]
+        for message in history { for call in message.toolCalls ?? [] { callArguments[call.id] = call.arguments } }
         func plausible(_ entry: TranscriptEntry, _ message: ChatMessage) -> Bool {
             message.createdAt <= 0 || entry.createdAt <= 0 || message.createdAt >= entry.createdAt - 10
         }
@@ -548,9 +558,9 @@ enum TranscriptReconciliation {
             if message.createdAt > 0 { entry = entry.retimed(message.createdAt) }
             updates.append(entry); known.insert(message.id); turn = entry.turnID
         }
-        for message in history {
+        for message in history where message.role != "tool_calls" {
             guard !known.contains(message.id) else {
-                if let match = existing.first(where: { $0.id == message.id || $0.historyID == message.id }) { turn = match.turnID }
+                if let match = existing.first(where: { $0.historyID == message.id }) { turn = match.turnID }
                 continue
             }
             let time = message.createdAt > 0 ? message.createdAt : lastTime
@@ -562,7 +572,7 @@ enum TranscriptReconciliation {
                     claim(index, message)
                 } else {
                     turn = "history-" + message.id
-                    updates.append(TranscriptEntry(id: message.id, turnID: turn, address: address, kind: .userToLuna, text: message.content,
+                    updates.append(TranscriptEntry(id: TranscriptEntry.historyEntryID(address, message.id), turnID: turn, address: address, kind: .userToLuna, text: message.content,
                                                    agentName: agentName, photos: message.photos, historyID: message.id, createdAt: time))
                     known.insert(message.id)
                 }
@@ -570,11 +580,15 @@ enum TranscriptReconciliation {
                 let name = message.toolName ?? "Tool"
                 // Live tool rows carry only a preview, so match by name within the
                 // current turn (the run whose prompt was just claimed) and time.
+                let arguments = message.toolCallID.flatMap { callArguments[$0] } ?? ""
                 if let index = candidates.firstIndex(where: { $0.kind == .agentTool && $0.tool?.name == name && $0.turnID == turn }) {
-                    claim(index, message) { $0.tool?.result = message.content }
+                    claim(index, message) {
+                        $0.tool?.result = message.content
+                        if !arguments.isEmpty { $0.tool?.arguments = arguments }
+                    }
                 } else {
-                    updates.append(TranscriptEntry(id: message.id, turnID: turn, address: address, kind: .agentTool, text: "",
-                                                   tool: .init(name: name, result: message.content), agentName: agentName,
+                    updates.append(TranscriptEntry(id: TranscriptEntry.historyEntryID(address, message.id), turnID: turn, address: address, kind: .agentTool, text: "",
+                                                   tool: .init(name: name, arguments: arguments, result: message.content), agentName: agentName,
                                                    historyID: message.id, createdAt: time))
                     known.insert(message.id)
                 }
@@ -584,7 +598,7 @@ enum TranscriptReconciliation {
                 if let index = candidates.firstIndex(where: { $0.kind == .agentFinal && $0.text == message.content && ($0.turnID == turn || plausible($0, message)) }) {
                     claim(index, message)
                 } else {
-                    updates.append(TranscriptEntry(id: message.id, turnID: turn, address: address, kind: .agentFinal, text: message.content,
+                    updates.append(TranscriptEntry(id: TranscriptEntry.historyEntryID(address, message.id), turnID: turn, address: address, kind: .agentFinal, text: message.content,
                                                    agentName: agentName, photos: message.photos, historyID: message.id, createdAt: time))
                     known.insert(message.id)
                 }

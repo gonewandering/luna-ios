@@ -293,7 +293,7 @@ import Observation
             let page = try await backend.messages(sid, offset: older ? (messages[sid]?.count ?? 0) : 0)
             guard generation == current, sessionRevisions[sid, default: 0] == revision else { return }
             let existing = messages[sid] ?? []
-            messages[sid] = ConversationHistory.merge(existing: existing, incoming: page.messages, older: older)
+            messages[sid] = ConversationHistory.merge(existing: existing, incoming: page.messages.filter { $0.role != "tool_calls" }, older: older)
             recorder?.reconcile(page.messages, sessionID: sid, fallbackTime: sessions.first { $0.id == sid }?.updatedAt ?? 0)
             if !older { historyFetchedAt[sid] = Date().timeIntervalSince1970 }
             if older || existing.count <= page.messages.count { historyHasMore[sid] = page.hasMore }

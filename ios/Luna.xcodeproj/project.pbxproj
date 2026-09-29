@@ -13,6 +13,7 @@
 		0BA4C4EF3498F60D61A34FE0 /* LunaTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDF59CED60218ECEC6977138 /* LunaTests.swift */; };
 		1CAB49EBF924D4AEA7CA0B46 /* ChatPhotoControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = BABAEBA38760C0ABFB68D8CD /* ChatPhotoControls.swift */; };
 		1F5EB897369B687077E805F9 /* DemoBackend.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D003B67552AAA3BB9F8F809 /* DemoBackend.swift */; };
+		27D7926F53F15043ECB4ED66 /* ToolWork.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A33B2EB2B0530A03501DBD6 /* ToolWork.swift */; };
 		29A9DA131C4A6D3A00F2CFAA /* CodingAgentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1390E41162708E73D07FA46 /* CodingAgentTests.swift */; };
 		2FC82693FCFF9BA868808220 /* LiveConnectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74B13D10D3551746B180EB9F /* LiveConnectionTests.swift */; };
 		2FD3D00D0BE5713FE25A5594 /* WebRTC in Frameworks */ = {isa = PBXBuildFile; productRef = 6AC5D36286B41C269A1986A1 /* WebRTC */; };
@@ -33,6 +34,7 @@
 		672161572B5581E4732EFECF /* NoticeCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = B42DC2311D4BE8F5AFA81672 /* NoticeCard.swift */; };
 		706B7C69FC62D19D069703F6 /* ChatPhoto.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B62B1520960DBF0EB2897C3 /* ChatPhoto.swift */; };
 		741130FDCBC245770ED2136D /* MultiAgentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F43D3DE575F4C271CC601EDF /* MultiAgentTests.swift */; };
+		74EC91F317C94A4EF3EC9FCC /* ToolWorkCards.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D5697B0FEB59DD4840D0348 /* ToolWorkCards.swift */; };
 		84E0EAB69F2E15161CC5CA04 /* CodingAgentBackend.swift in Sources */ = {isa = PBXBuildFile; fileRef = A47193206AC87D847FBE0464 /* CodingAgentBackend.swift */; };
 		8584C6734F40A3F93CF45482 /* VoiceTurnSegmenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5838C6C93829B07747D37C3 /* VoiceTurnSegmenter.swift */; };
 		8C8F4CEF9CECEAE441078C65 /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3A7EBAEB8A9F84547ED0E2C /* ChatView.swift */; };
@@ -60,6 +62,7 @@
 		F30E4443E7AA273D55806D9B /* TranscriptCaptureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21B150BE3DCDB4C36268B19E /* TranscriptCaptureTests.swift */; };
 		F40EC69174E6D5E09403DF6B /* AutoModelRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3AA6044B370434508DB9A721 /* AutoModelRouter.swift */; };
 		F50262065CEB9B516AC6C133 /* ReceivedAttachment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4EA22364603F42C736FC41B3 /* ReceivedAttachment.swift */; };
+		F6124B5F990A4BCDDACDED4A /* ToolWorkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADD1C99D6837FB900EE0AFE9 /* ToolWorkTests.swift */; };
 		FB1B524A7D126D8634BD2B1E /* MessageComposer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 302DF9BB207518423723E66D /* MessageComposer.swift */; };
 		FD69ADCF156F971F46D2EEF3 /* TranscriptStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB729E04C69366A09137F1C9 /* TranscriptStoreTests.swift */; };
 		FF8C1079AA50B6511BC84EF8 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 090F46C385278EFF03C80323 /* Assets.xcassets */; };
@@ -94,6 +97,7 @@
 		1B489908E6021F97F42E5BE5 /* RichMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RichMessage.swift; sourceTree = "<group>"; };
 		21B150BE3DCDB4C36268B19E /* TranscriptCaptureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptCaptureTests.swift; sourceTree = "<group>"; };
 		2837C07A5462674A1274DFD6 /* TranscriptViewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptViewTests.swift; sourceTree = "<group>"; };
+		2D5697B0FEB59DD4840D0348 /* ToolWorkCards.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToolWorkCards.swift; sourceTree = "<group>"; };
 		2D8D6217015CDB52B1BE9F88 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		302DF9BB207518423723E66D /* MessageComposer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageComposer.swift; sourceTree = "<group>"; };
 		3AA6044B370434508DB9A721 /* AutoModelRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutoModelRouter.swift; sourceTree = "<group>"; };
@@ -105,6 +109,7 @@
 		5236D692D2EABE6416E275AA /* AgentProfile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentProfile.swift; sourceTree = "<group>"; };
 		54D2E5407D725E944A5D8983 /* Transcript.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Transcript.swift; sourceTree = "<group>"; };
 		576E817E7F2EF6EBD3E0896C /* LocalMemory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalMemory.swift; sourceTree = "<group>"; };
+		5A33B2EB2B0530A03501DBD6 /* ToolWork.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToolWork.swift; sourceTree = "<group>"; };
 		5B8A80D16591DCF4C398C87D /* CodingProgressReporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodingProgressReporter.swift; sourceTree = "<group>"; };
 		5C8ADDF94DDDFF9CE88126F0 /* SessionModelPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionModelPicker.swift; sourceTree = "<group>"; };
 		623B08465663BD7645249282 /* HermesModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HermesModels.swift; sourceTree = "<group>"; };
@@ -120,6 +125,7 @@
 		9FDE2C62DFC153BB6FD28977 /* OpenAILiveSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenAILiveSession.swift; sourceTree = "<group>"; };
 		A1390E41162708E73D07FA46 /* CodingAgentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodingAgentTests.swift; sourceTree = "<group>"; };
 		A47193206AC87D847FBE0464 /* CodingAgentBackend.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodingAgentBackend.swift; sourceTree = "<group>"; };
+		ADD1C99D6837FB900EE0AFE9 /* ToolWorkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToolWorkTests.swift; sourceTree = "<group>"; };
 		AF046A466A92E8ACD7BDDAF0 /* AttachmentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AttachmentTests.swift; sourceTree = "<group>"; };
 		B42DC2311D4BE8F5AFA81672 /* NoticeCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoticeCard.swift; sourceTree = "<group>"; };
 		BABAEBA38760C0ABFB68D8CD /* ChatPhotoControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatPhotoControls.swift; sourceTree = "<group>"; };
@@ -201,6 +207,7 @@
 				3F769306A7E4F688823015D8 /* Persistence.swift */,
 				4EA22364603F42C736FC41B3 /* ReceivedAttachment.swift */,
 				E81F3F231CEEBA56E46D061F /* RunCoordinator.swift */,
+				5A33B2EB2B0530A03501DBD6 /* ToolWork.swift */,
 				54D2E5407D725E944A5D8983 /* Transcript.swift */,
 				96969B6961C049BB60D453B2 /* TranscriptRecorder.swift */,
 				C5AFDF72DEE4AD51379C4317 /* TransientNotices.swift */,
@@ -217,6 +224,7 @@
 				BDF59CED60218ECEC6977138 /* LunaTests.swift */,
 				CAD6FE67F1EEF86E27824070 /* LunaTextRouterTests.swift */,
 				F43D3DE575F4C271CC601EDF /* MultiAgentTests.swift */,
+				ADD1C99D6837FB900EE0AFE9 /* ToolWorkTests.swift */,
 				21B150BE3DCDB4C36268B19E /* TranscriptCaptureTests.swift */,
 				CB729E04C69366A09137F1C9 /* TranscriptStoreTests.swift */,
 				2837C07A5462674A1274DFD6 /* TranscriptViewTests.swift */,
@@ -260,6 +268,7 @@
 				5C8ADDF94DDDFF9CE88126F0 /* SessionModelPicker.swift */,
 				C4E6D1A2787BCD84F2CA0FF5 /* TaskHistoryView.swift */,
 				FA21F9D657ACA2D410DE710F /* Theme.swift */,
+				2D5697B0FEB59DD4840D0348 /* ToolWorkCards.swift */,
 				0C4B8844F51AFC093F5CAFAC /* TranscriptView.swift */,
 			);
 			path = Views;
@@ -422,6 +431,7 @@
 				0BA4C4EF3498F60D61A34FE0 /* LunaTests.swift in Sources */,
 				5C14E830CC489AE7C2A9AEEF /* LunaTextRouterTests.swift in Sources */,
 				741130FDCBC245770ED2136D /* MultiAgentTests.swift in Sources */,
+				F6124B5F990A4BCDDACDED4A /* ToolWorkTests.swift in Sources */,
 				F30E4443E7AA273D55806D9B /* TranscriptCaptureTests.swift in Sources */,
 				FD69ADCF156F971F46D2EEF3 /* TranscriptStoreTests.swift in Sources */,
 				93208B0C3670DBC964B4A8BD /* TranscriptViewTests.swift in Sources */,
@@ -466,6 +476,8 @@
 				8F64EB25775D2239FB3A01BB /* SessionModelPicker.swift in Sources */,
 				EB8D5DA8E42E32A82037A7BD /* TaskHistoryView.swift in Sources */,
 				D2B8E3D89720D284733EF140 /* Theme.swift in Sources */,
+				27D7926F53F15043ECB4ED66 /* ToolWork.swift in Sources */,
+				74EC91F317C94A4EF3EC9FCC /* ToolWorkCards.swift in Sources */,
 				BE228A7A4E87EC49C5D7467A /* Transcript.swift in Sources */,
 				99C285426949E8CD6FD153BA /* TranscriptRecorder.swift in Sources */,
 				95C43E042BB45F9DCFA5E19B /* TranscriptView.swift in Sources */,

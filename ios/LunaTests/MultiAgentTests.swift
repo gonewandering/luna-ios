@@ -135,7 +135,8 @@ final class MultiAgentTests: XCTestCase {
         a.reads = 0; b.reads = 0
         let args: JSONObject = ["agent_id": .string(pa.id), "session_id": .string("shared")]
         let context = try await store.executeVoice("get_session_context", arguments: args, id: "context")
-        XCTAssertTrue(context["messages"]?.array?.contains { $0.object?["content"]?.string == "A remembered answer" } == true)
+        XCTAssertTrue(context["entries"]?.array?.contains { $0.object?["text"]?.string == "A remembered answer" } == true)
+        XCTAssertEqual(context["source"], .string("local_transcript"))
         let result = try await store.executeVoice("search_local_context", arguments: ["query": .string("remembered"), "agent_id": .string(pb.id), "limit": .number(20)], id: "search")
         XCTAssertEqual(result["matches"]?.array?.count, 3)
         _ = try await store.executeVoice("list_sessions", arguments: ["agent_id": .null, "offset": .number(0)], id: "list")

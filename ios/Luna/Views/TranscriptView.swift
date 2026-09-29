@@ -151,8 +151,9 @@ struct TranscriptEntryView: View {
     }
 }
 
-/// A run's (or Luna's) tool activity: a thin rail of steps, collapsed once
-/// everything has finished. Tap a step for its arguments and result.
+/// Tool activity for one run (or one Luna turn). Agent work is shown open, one
+/// typed card per call on a thin rail; Luna's own lookups stay a compact,
+/// expandable "Luna checked N things" row.
 struct ToolGroupView: View {
     let id: String
     let tools: [TranscriptEntry]
@@ -162,52 +163,35 @@ struct ToolGroupView: View {
     private var failed: Bool { tools.contains { $0.tool?.status == "failed" } }
 
     var body: some View {
-        let luna = label == "Luna"
+        if label == "Luna" { lunaLookups } else { agentWork }
+    }
+
+    private var agentWork: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 6) {
+                if active { ProgressView().controlSize(.mini) }
+                Text(label.uppercased() + " · \(tools.count) STEP\(tools.count == 1 ? "" : "S")" + (active ? " · WORKING" : ""))
+                    .font(.system(size: 9, weight: .bold)).tracking(1.4)
+            }.foregroundStyle(failed ? Palette.orange : Palette.sectionLabel)
+            VStack(alignment: .leading, spacing: 14) {
+                ForEach(tools) { entry in ToolWorkCard(entry: entry).id(entry.id) }
+            }
+            .padding(.leading, 12)
+            .overlay(alignment: .leading) { Rectangle().fill(Palette.line).frame(width: 1) }
+        }
+    }
+
+    private var lunaLookups: some View {
         DisclosureGroup(isExpanded: Binding(get: { open || active }, set: { open = $0 })) {
-            VStack(alignment: .leading, spacing: 0) {
-                ForEach(tools) { entry in ToolRow(entry: entry) }
+            VStack(alignment: .leading, spacing: 12) {
+                ForEach(tools) { entry in ToolWorkCard(entry: entry) }
             }.padding(.top, 8)
         } label: {
             HStack(spacing: 8) {
                 if active { ProgressView().controlSize(.mini) }
-                else { Image(systemName: failed ? "exclamationmark.circle" : luna ? "magnifyingglass" : "checkmark.circle").font(.caption) }
-                Text(luna ? "Luna checked \(tools.count) thing\(tools.count == 1 ? "" : "s")"
-                     : label + " · \(tools.count) step\(tools.count == 1 ? "" : "s")" + (active ? " · working" : ""))
-                    .font(.caption.weight(.medium))
+                else { Image(systemName: failed ? "exclamationmark.circle" : "magnifyingglass").font(.caption) }
+                Text("Luna checked \(tools.count) thing\(tools.count == 1 ? "" : "s")").font(.caption.weight(.medium))
             }.foregroundStyle(failed ? Palette.orange : Palette.sectionLabel)
         }.tint(Palette.sectionLabel).padding(.leading, 4)
-    }
-}
-
-private struct ToolRow: View {
-    let entry: TranscriptEntry
-    @State private var showDetail = TranscriptDebug.expandAll
-    var body: some View {
-        let tool = entry.tool
-        HStack(alignment: .top, spacing: 10) {
-            VStack(spacing: 0) {
-                Image(systemName: tool?.status == "failed" ? "xmark.circle.fill" : tool?.status == "running" ? "circle.dotted" : tool?.status == "interrupted" ? "minus.circle" : "checkmark.circle.fill")
-                    .font(.system(size: 11)).foregroundStyle(tool?.status == "failed" ? Palette.orange : Palette.sectionLabel)
-                Rectangle().fill(Palette.line).frame(width: 1).frame(maxHeight: .infinity)
-            }
-            VStack(alignment: .leading, spacing: 4) {
-                Button { showDetail.toggle() } label: {
-                    HStack(spacing: 6) {
-                        Text(tool?.name ?? "Tool").font(.caption.weight(.semibold)).foregroundStyle(Palette.ink)
-                        if !entry.text.isEmpty { Text(entry.text).font(.caption).foregroundStyle(Palette.muted).lineLimit(1) }
-                    }.contentShape(Rectangle())
-                }.buttonStyle(.plain).accessibilityHint("Shows arguments and result")
-                if showDetail {
-                    if let arguments = tool?.arguments, !arguments.isEmpty {
-                        Text("Arguments").font(.system(size: 9, weight: .semibold)).tracking(1.2).foregroundStyle(Palette.sectionLabel)
-                        Text(arguments).font(.system(.caption2, design: .monospaced)).textSelection(.enabled).lineLimit(20)
-                    }
-                    if let result = tool?.result, !result.isEmpty {
-                        Text("Result").font(.system(size: 9, weight: .semibold)).tracking(1.2).foregroundStyle(Palette.sectionLabel)
-                        Text(String(result.prefix(4_000))).font(.system(.caption2, design: .monospaced)).textSelection(.enabled).lineLimit(40)
-                    }
-                }
-            }.padding(.bottom, 10)
-        }.fixedSize(horizontal: false, vertical: true)
     }
 }
