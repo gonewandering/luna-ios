@@ -43,6 +43,12 @@ import Observation
     var voiceTargetsSession: Bool { profile == nil || voice.agentID == profile?.id }
     private(set) var historyFetchedAt: [String: Double] = [:]
     @ObservationIgnored var onVoiceRequest: ((String) async -> Void)?
+    /// Set by LunaStore: typed session messages go through Luna, not straight to
+    /// the agent. Returns an error message when Luna cannot take it.
+    @ObservationIgnored var sendThroughLuna: ((String, String) -> String?)?
+    /// Whether Luna can interpret typed messages (needs its OpenAI key).
+    @ObservationIgnored var lunaAvailable: () -> Bool = { false }
+    @ObservationIgnored var lunaBusy: () -> Bool = { false }
     @ObservationIgnored var onRunFinished: ((AgentRun) async -> Void)?
     @ObservationIgnored var onLocalStateChanged: (() -> Void)?
     @ObservationIgnored var makeBackend: (() throws -> any AgentBackend)?
@@ -312,6 +318,13 @@ import Observation
         let text = (drafts[sid] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let selectedPhotos = photoDrafts[sid] ?? []
         guard !text.isEmpty || !selectedPhotos.isEmpty else { return }
+        // Text goes through Luna. Photos still go straight to the agent: Luna's
+        // text router has no image input, and dropping them silently is worse.
+        if let sendThroughLuna, selectedPhotos.isEmpty {
+            if let failure = sendThroughLuna(sid, text) { error = failure; return }
+            if drafts[sid]?.trimmingCharacters(in: .whitespacesAndNewlines) == text { drafts[sid] = "" }
+            return
+        }
         do {
             guard selectedPhotos.isEmpty || canAttachPhotos else { throw ServiceError(message: "Photo attachments are available in Hermes chats.") }
             guard selectedPhotos.count <= ChatPhoto.maxCount else { throw ServiceError(message: "Attach up to four photos per message.") }

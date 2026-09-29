@@ -110,7 +110,15 @@ struct HomeSession: Identifiable {
     func session(_ address: SessionAddress) -> AgentSession? { runtimes[address.agentID]?.sessions.first { $0.id == address.sessionID } }
     func key(for profile: AgentProfile) -> String { readKey(profile.keyAccount) }
 
-    func sendLunaText(agentID: String? = nil) {
+    /// Typed in a session's own chat: Luna interprets it and sends it to that
+    /// session only, then summarizes the agent's answer.
+    func sendSessionText(_ address: SessionAddress, text: String) {
+        guard session(address) != nil else { error = "This conversation is no longer available."; return }
+        lunaText.draft = text
+        sendLunaText(bound: address)
+    }
+
+    func sendLunaText(agentID: String? = nil, bound: SessionAddress? = nil) {
         let prompt = lunaText.draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !lunaText.sending, !prompt.isEmpty else { return }
         guard prompt.count <= 32_000 else { error = "Please keep Luna’s message under 32,000 characters."; return }
@@ -121,10 +129,13 @@ struct HomeSession: Identifiable {
         lunaText.draft = ""; lunaText.sending = true; lunaText.replyHidden = false
         lunaText.messages.append(ChatMessage(id: turnID, role: "user", content: prompt, createdAt: Date().timeIntervalSince1970))
         lunaText.messages = Array(lunaText.messages.suffix(24))
-        recordUserTurn(turnID, text: prompt, source: .typed, address: lunaText.destination.flatMap { session($0) != nil ? $0 : nil })
+        recordUserTurn(turnID, text: prompt, source: .typed, address: bound ?? lunaText.destination.flatMap { session($0) != nil ? $0 : nil })
         var context: JSONObject = ["current_time": .number(Date().timeIntervalSince1970), "time_zone": .string(TimeZone.current.identifier),
                                   "browsing_agent_id": agentID.map(JSONValue.string) ?? .null]
-        if let target = lunaText.destination, session(target) != nil {
+        if let bound {
+            context["bound_destination"] = .object(["agent_id": .string(bound.agentID), "session_id": .string(bound.sessionID)]
+                .merging(destinationContext(bound, entryLimit: 30, characterBudget: 8_000)) { _, new in new })
+        } else if let target = lunaText.destination, session(target) != nil {
             context["previous_destination"] = .object(["agent_id": .string(target.agentID), "session_id": .string(target.sessionID)])
             if let history = sessionContext(target, entryLimit: 30, characterBudget: 8_000) { context["previous_destination_transcript"] = .object(history) }
         }
@@ -136,6 +147,7 @@ struct HomeSession: Identifiable {
                 let reply = try await router.reply(prompt: prompt, history: history, context: context, turnID: turnID) { [weak self] name, args, id in
                     guard let self else { throw CancellationError() }
                     try Task.checkCancellation()
+                    if let bound { try Self.checkBound(name, args, to: bound) }
                     let result = try await executeVoice(name, arguments: args, id: id, turnID: turnID)
                     if ["select_session", "create_session", "send_prompt"].contains(name),
                        let agent = result["agent_id"]?.string, let session = result["session_id"]?.string {
@@ -145,13 +157,52 @@ struct HomeSession: Identifiable {
                 }
                 lunaText.messages.append(ChatMessage(id: turnID + "-reply", role: "assistant", content: reply, createdAt: Date().timeIntervalSince1970))
                 lunaText.messages = Array(lunaText.messages.suffix(24))
-                recordLunaReply(turnID, text: reply)
+                recordLunaReply(turnID, text: reply, address: bound)
             } catch is CancellationError {
                 error = "Luna stopped. Any task already sent is still available in its conversation."
             } catch { self.error = error.localizedDescription }
         }
     }
     func stopLunaText() { textTask?.cancel() }
+
+    /// A session-composer turn may only act on its own session.
+    static func checkBound(_ name: String, _ args: JSONObject, to bound: SessionAddress) throws {
+        if ["select_session", "create_session"].contains(name) {
+            throw ServiceError(message: "This message was typed in a specific conversation; keep it there.")
+        }
+        if ["send_prompt", "stop_agent"].contains(name),
+           args["agent_id"]?.string != bound.agentID || args["session_id"]?.string != bound.sessionID {
+            throw ServiceError(message: "This message was typed in a specific conversation. Use its agent_id and session_id.")
+        }
+        if name == "start_coding_task", args["agent_id"]?.string != bound.agentID {
+            throw ServiceError(message: "This message was typed in a specific conversation. Use its agent_id.")
+        }
+    }
+
+    /// After a typed turn's run finishes, Luna reads the agent's answer and
+    /// writes a short summary above it; the raw answer stays expandable.
+    /// Voice turns are summarized by Luna speaking, so they are skipped here.
+    func summarizeTypedRun(_ run: AgentRun, agentID: String) async {
+        guard let turnID = run.turnID, !run.isActive,
+              (try? transcripts.entries(turn: turnID))?.contains(where: { $0.kind == .userToLuna && $0.source == .typed }) == true else { return }
+        let outputID = TranscriptRecorder.outputID(run.id)
+        guard let output = try? transcripts.entry(outputID), !output.text.isEmpty else { return }
+        let replyID = "summary-" + run.id
+        guard (try? transcripts.entry(replyID)) == nil else { return }
+        let address = SessionAddress(agentID: agentID, sessionID: run.sessionID)
+        let name = profiles.first { $0.id == agentID }?.name ?? "The agent"
+        // Short answers speak for themselves.
+        if output.text.count <= Self.summaryThreshold && run.status == "completed" { return }
+        var text: String
+        if let makeTextRouter = makeTextRouter ?? (openAIKey.isEmpty ? nil : { LunaTextRouter(key: $0) }) {
+            do { text = try await makeTextRouter(openAIKey).summarize(agentName: name, request: run.text, response: output.text, status: run.status) }
+            catch { text = name + (run.status == "completed" ? " finished. " : " stopped (" + run.statusLabel.lowercased() + "). ") + "Its full response is below." }
+        } else { return }
+        if text.isEmpty { return }
+        try? transcripts.upsert(TranscriptEntry(id: replyID, turnID: turnID, address: address, kind: .lunaToUser, source: .typed, text: text,
+                                                runID: run.id, summarizes: [outputID], createdAt: max(output.createdAt + 0.001, Date().timeIntervalSince1970)))
+    }
+    static let summaryThreshold = 600
 
     @discardableResult func renameAgent(_ id: String, name: String) throws -> AgentProfile {
         guard storageError == nil else { throw ServiceError(message: storageError!) }
@@ -285,12 +336,22 @@ struct HomeSession: Identifiable {
             self?.profiles.first { $0.id == profile.id }?.name ?? profile.name
         }
         runtime.onVoiceRequest = { [weak self] sid in await self?.startVoice(target: SessionAddress(agentID: profile.id, sessionID: sid)) }
+        runtime.lunaAvailable = { [weak self] in self.map { !$0.openAIKey.isEmpty || $0.makeTextRouter != nil } ?? false }
+        runtime.lunaBusy = { [weak self] in self?.lunaText.sending ?? false }
+        runtime.sendThroughLuna = { [weak self] sid, text in
+            guard let self else { return "Luna is unavailable." }
+            guard !openAIKey.isEmpty || makeTextRouter != nil else { return "Add Luna’s OpenAI API key in Settings. Messages in a conversation go through Luna." }
+            guard !lunaText.sending else { return "Luna is still working on your last message." }
+            sendSessionText(SessionAddress(agentID: profile.id, sessionID: sid), text: text)
+            return nil
+        }
         runtime.onLocalStateChanged = { [weak self] in self?.syncMemory(profile.id) }
         runtime.onRunFinished = { [weak self] run in
             guard let self else { return }
             syncMemory(profile.id)
             finishCodingProgress(run)
             await voice.finished(run, agentID: profile.id, agentName: self.profiles.first(where: { $0.id == profile.id })?.name ?? profile.name)
+            await summarizeTypedRun(run, agentID: profile.id)
         }
         runtimes[profile.id] = runtime
         syncMemory(profile.id)

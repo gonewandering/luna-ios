@@ -185,8 +185,11 @@ struct ChatView: View {
                     }
                 }
                 if importingPhotos { ProgressView("Preparing photos…").font(.caption).foregroundStyle(Palette.muted) }
-                MessageComposer(text: draft, placeholder: "Ask \(store.agentName)…", messageLabel: "Message to " + store.agentName,
-                    sending: sending || importingPhotos, canSend: store.connected && !store.changingModels.contains(session.id),
+                let viaLuna = store.sendThroughLuna != nil && photos.isEmpty
+                MessageComposer(text: draft, placeholder: viaLuna ? "Ask Luna to tell \(store.agentName)…" : "Ask \(store.agentName)…",
+                    messageLabel: viaLuna ? "Message to Luna for " + store.agentName : "Message to " + store.agentName,
+                    sending: sending || importingPhotos || (viaLuna && store.lunaBusy()),
+                    canSend: store.connected && !store.changingModels.contains(session.id) && (!viaLuna || store.lunaAvailable()),
                     voiceIsActive: false, hasAttachments: !photos.isEmpty, canAddPhoto: photos.count < ChatPhoto.maxCount,
                     onAddPhoto: store.canAttachPhotos ? { showingPhotoOptions = true } : nil, focus: $composerFocused,
                     onMicrophone: { Task { await store.startVoice(session.id) } },
@@ -198,7 +201,10 @@ struct ChatView: View {
                         sending = true
                         Task { await store.send(session.id); sending = false }
                     })
-                Text(store.demo ? "Demo connector · sample agent responses" : !store.connected ? "Cached conversation · reconnect the agent to send" : store.agentName + " · this conversation stays in its session")
+                Text(store.demo ? "Demo connector · sample agent responses" : !store.connected ? "Cached conversation · reconnect the agent to send"
+                     : viaLuna && !store.lunaAvailable() ? "Add Luna’s OpenAI key in Settings to send here"
+                     : viaLuna ? "Luna passes this to " + store.agentName + " and summarizes the answer"
+                     : store.agentName + " · photos go straight to the agent")
                     .font(.system(size: 10)).foregroundStyle(Palette.muted)
             }
         }.padding(.horizontal, 18).padding(.top, 10)
